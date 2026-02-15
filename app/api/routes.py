@@ -5,6 +5,7 @@ import pandas as pd
 import io
 import json
 from typing import Literal
+from datetime import datetime, timezone
 
 from ..core import models, reporting, project_health
 from ..worker import process_wallet_list
@@ -67,8 +68,23 @@ def get_job_status(job_id: int, db: Session = Depends(get_db)):
 
     if job.status == 'IN_PROGRESS' and processed_count == job.total_wallets:
         job.status = 'COMPLETED'
+        job.completed_at = datetime.now(timezone.utc)
+
+        # Calculate duration if we have started_at
+        if job.started_at and job.completed_at:
+            job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
+
         db.commit()
         db.refresh(job)
+
+    # Calculate elapsed time for in-progress jobs
+    elapsed_seconds = None
+    if job.started_at:
+        if job.completed_at:
+            elapsed_seconds = job.analysis_duration_seconds
+        else:
+            # Still running - calculate current elapsed time
+            elapsed_seconds = (datetime.now(timezone.utc) - job.started_at).total_seconds()
 
     return {
         "job_id": job.id,
@@ -77,6 +93,9 @@ def get_job_status(job_id: int, db: Session = Depends(get_db)):
         "wallets_processed": processed_count,
         "project_name": job.project_name,
         "created_at": job.created_at,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
+        "elapsed_seconds": elapsed_seconds,
         "result": job.result,
     }
 

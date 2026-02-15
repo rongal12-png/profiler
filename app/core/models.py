@@ -19,6 +19,9 @@ class AnalysisJob(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    analysis_duration_seconds = Column(Float, nullable=True)
     status = Column(SQLAlchemyEnum(JobStatus), default=JobStatus.PENDING)
     total_wallets = Column(Integer)
     project_name = Column(String, nullable=True)

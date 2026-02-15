@@ -5,6 +5,7 @@ from .core import settings_service, sanctions_service
 from celery import Celery
 from celery.schedules import crontab
 import logging
+from datetime import datetime, timezone
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,8 +44,12 @@ def process_wallet_list(job_id: int, wallets: list[dict]):
             logger.error(f"Job with ID {job_id} not found.")
             return
 
+        # Record start time
         job.status = 'IN_PROGRESS'
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
+
+        logger.info(f"Job {job_id} started at {job.started_at}")
 
         for wallet_info in wallets:
             analyze_wallet.delay(job_id, wallet_info['address'], wallet_info['chain'])
@@ -53,6 +58,10 @@ def process_wallet_list(job_id: int, wallets: list[dict]):
         logger.error(f"Error in process_wallet_list for job {job_id}: {e}")
         job.status = 'FAILED'
         job.result = str(e)
+        # Record completion time even on failure
+        job.completed_at = datetime.now(timezone.utc)
+        if job.started_at:
+            job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
         db.commit()
     finally:
         db.close()
