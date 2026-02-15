@@ -1,0 +1,55 @@
+{
+  "labels": [
+    {"address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "chain": "ethereum", "label_type": "kol", "wallet_type": "USER", "label_name": "Vitalik Buterin", "confidence": 0.99, "source": "public"},
+    {"address": "0x220866B1A2219f40e72f5c628B65D54268cA3A9D", "chain": "ethereum", "label_type": "vc", "wallet_type": "USER", "label_name": "Paradigm", "confidence": 0.95, "source": "public"},
+    {"address": "0x9845e1909dca337944a0272F1f9f7249833D2D19", "chain": "ethereum", "label_type": "vc", "wallet_type": "USER", "label_name": "a16z Crypto", "confidence": 0.95, "source": "public"},
+    {"address": "0x0716a17FBAeE714f1E6aB0f9d59edbC5f09815C0", "chain": "ethereum", "label_type": "vc", "wallet_type": "USER", "label_name": "Jump Trading", "confidence": 0.95, "source": "public"},
+    {"address": "0xA090e606E30bD747d4E6245a1517EbE430F0057e", "chain": "ethereum", "label_type": "vc", "wallet_type": "USER", "label_name": "Wintermute", "confidence": 0.95, "source": "public"},
+    {"address": "0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503", "chain": "ethereum", "label_type": "smart_money", "wallet_type": "USER", "label_name": "Justin Sun", "confidence": 0.90, "source": "public"},
+    {"address": "0x3DdfA8eC3052539b6C9549F12cEA2C295cfF5296", "chain": "ethereum", "label_type": "smart_money", "wallet_type": "USER", "label_name": "Pranksy (NFT Whale)", "confidence": 0.90, "source": "public"},
+
+    {"address": "0x2FAF487A4414Fe77e2327F0bf4AE2a264a776AD2", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "FTX (Defunct)", "confidence": 0.99, "source": "public"},
+    {"address": "0x28C6c06298d514Db089934071355E5743bf21d60", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Binance Hot Wallet", "confidence": 0.99, "source": "public"},
+    {"address": "0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Binance Hot Wallet 2", "confidence": 0.99, "source": "public"},
+    {"address": "0xDFd5293D8e347dFe59E90eFd55b2956a1343963d", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Binance Hot Wallet 3", "confidence": 0.99, "source": "public"},
+    {"address": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Binance Cold Wallet", "confidence": 0.99, "source": "public"},
+    {"address": "0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "OKX", "confidence": 0.99, "source": "public"},
+    {"address": "0x1DB92e2EeBC8E0c075a02BeA49a2935BcD2dFCF4", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Bybit", "confidence": 0.99, "source": "public"},
+    {"address": "0x56Eddb7aa87536c09CCc2793473599fD21A8b17F", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Kraken", "confidence": 0.99, "source": "public"},
+    {"address": "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Gate.io", "confidence": 0.95, "source": "public"},
+    {"address": "0xA9D1e08C7793af67e9d92fe308d5697FB81d3E43", "chain": "ethereum", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Coinbase", "confidence": 0.99, "source": "public"},
+
+    {"address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "Uniswap V2 Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0xE592427A0AEce92De3Edee1F18E0157C05861564", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "Uniswap V3 Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "Uniswap Universal Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "SushiSwap Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0x1111111254fb6c44bAC0beD2854e76F90643097d", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "1inch V4 Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0x1111111254EEB25477B68fb85Ed929f73A960582", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "1inch V5 Router", "confidence": 0.99, "source": "contract"},
+    {"address": "0xDef1C0ded9bec7F1a1670819833240f027b25EfF", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "0x Exchange Proxy", "confidence": 0.99, "source": "contract"},
+    {"address": "0x10ED43C718714eb63d5aA57B78B54704E256024E", "chain": "ethereum", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "PancakeSwap V2 Router", "confidence": 0.99, "source": "contract"},
+
+    {"address": "0x3E4a3a4796d16c0Cd582C382691998f7c06420B6", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Hop Protocol", "confidence": 0.95, "source": "contract"},
+    {"address": "0x8731d54E9D02c286767d56ac03e8037C07e01e98", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Stargate Router", "confidence": 0.95, "source": "contract"},
+    {"address": "0x4D73AdB72bC3DD368966edD0f0b2148401A178E2", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Across Protocol", "confidence": 0.95, "source": "contract"},
+    {"address": "0xe4eDb277e41dc89aB076a1F049f4a3EfA700bCE8", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Orbiter Finance", "confidence": 0.90, "source": "contract"},
+    {"address": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Optimism Gateway", "confidence": 0.99, "source": "contract"},
+    {"address": "0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Arbitrum Bridge", "confidence": 0.99, "source": "contract"},
+    {"address": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Base Bridge", "confidence": 0.99, "source": "contract"},
+    {"address": "0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf", "chain": "ethereum", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Polygon Bridge", "confidence": 0.99, "source": "contract"},
+
+    {"address": "0x7Be8076f4EA4A4AD08075C2508e481d6C946D12b", "chain": "ethereum", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "OpenSea V1", "confidence": 0.99, "source": "contract"},
+    {"address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "chain": "ethereum", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "Tether (USDT)", "confidence": 0.99, "source": "contract"},
+    {"address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "chain": "ethereum", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "USD Coin (USDC)", "confidence": 0.99, "source": "contract"},
+    {"address": "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9", "chain": "ethereum", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "Aave V2 Pool", "confidence": 0.99, "source": "contract"},
+    {"address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84", "chain": "ethereum", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "Lido stETH", "confidence": 0.99, "source": "contract"},
+
+    {"address": "0x0000000000000000000000000000000000000000", "chain": "ethereum", "label_type": "burn", "wallet_type": "PROTOCOL", "label_name": "Zero Address", "confidence": 0.99, "source": "system"},
+
+    {"address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "chain": "solana", "label_type": "protocol", "wallet_type": "PROTOCOL", "label_name": "SPL Token Program", "confidence": 0.99, "source": "contract"},
+    {"address": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", "chain": "solana", "label_type": "exchange", "wallet_type": "CEX_EXCHANGE", "label_name": "Binance Solana Wallet", "confidence": 0.95, "source": "public"},
+    {"address": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", "chain": "solana", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "Jupiter Aggregator V6", "confidence": 0.99, "source": "contract"},
+    {"address": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", "chain": "solana", "label_type": "dex_router", "wallet_type": "DEX_ROUTER", "label_name": "Orca Whirlpool", "confidence": 0.99, "source": "contract"},
+    {"address": "wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb", "chain": "solana", "label_type": "bridge", "wallet_type": "BRIDGE", "label_name": "Wormhole Bridge", "confidence": 0.99, "source": "contract"}
+  ],
+  "_comment": "Schema: address, chain, label_type (vc|kol|smart_money|exchange|dex_router|bridge|protocol|burn), wallet_type (USER|CEX_EXCHANGE|DEX_ROUTER|BRIDGE|PROTOCOL|CONTRACT|UNKNOWN), label_name, confidence (0-1), source"
+}
