@@ -39,7 +39,8 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "update-sanctions-lists": {
         "task": "tasks.update_sanctions",
-        "schedule": crontab(hour="*/24"),
+        # timedelta: fires immediately on first start (never-run), then every 24h
+        "schedule": timedelta(hours=24),
     },
     # C2: Reap stale jobs stuck in IN_PROGRESS for more than 30 minutes
     "reap-stale-jobs": {

@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Source URLs
 SANCTIONS_SOURCES = {
-    "ofac_sdn": "https://www.treasury.gov/ofac/downloads/sdn_advanced.xml",
+    # OFAC SDN Advanced XML — new URL (old treasury.gov URL redirects here)
+    "ofac_sdn": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML",
     "eu_consolidated": "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=n002ofgv",
     "israel_nbctf": "https://nbctf.mod.gov.il/he/Sanctions/SanctionsList.json",
 }
@@ -144,7 +145,8 @@ def update_sanctions_list(list_name: str, db: Session | None = None) -> int:
 
         # Download the list
         logger.info(f"Downloading sanctions list: {list_name} from {source_url}")
-        resp = requests.get(source_url, timeout=120)
+        headers = {"User-Agent": "Mozilla/5.0 (Wallet Intelligence System; compliance use)"}
+        resp = requests.get(source_url, timeout=120, headers=headers)
         resp.raise_for_status()
         content = resp.content
         file_hash = hashlib.sha256(content).hexdigest()
