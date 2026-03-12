@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 import markdown2
@@ -13,9 +14,9 @@ from datetime import datetime
 from .chains import get_known_label
 from . import project_health
 
-# Setup Jinja2 environment
+# Setup Jinja2 environment (M10: autoescape=True to prevent XSS from blockchain data)
 template_loader = FileSystemLoader(searchpath=Path(__file__).parent / "templates")
-jinja_env = Environment(loader=template_loader)
+jinja_env = Environment(loader=template_loader, autoescape=True)
 
 
 def generate_reference_id(job_id: int) -> str:
@@ -269,6 +270,126 @@ def _aggregate_intent_signals(df: pd.DataFrame) -> dict:
     }
 
 
+def _aggregate_identity_data(df: pd.DataFrame) -> dict:
+    """
+    Aggregate identity enrichment data across all wallets.
+    Extracts country/region signals, ENS adoption, NFT stats, and wallet age from
+    activity_indicators dicts (where wallet_identity enrichment is stored).
+    """
+    total = len(df)
+    if total == 0:
+        return {"has_data": False}
+
+    country_counts: dict[str, int] = {}
+    region_counts: dict[str, int] = {}
+    funding_source_counts: dict[str, int] = {}
+    ens_count = 0
+    nft_holder_count = 0
+    blue_chip_count = 0
+    blue_chip_collections: dict[str, int] = {}
+    wallet_ages: list[int] = []
+    ens_wallets: list[dict] = []
+
+    for _, row in df.iterrows():
+        ai = row.get("activity_indicators")
+        if not isinstance(ai, dict):
+            continue
+
+        # Country / region
+        country = ai.get("country_hint")
+        if country and country != "Global":
+            country_counts[country] = country_counts.get(country, 0) + 1
+        region = ai.get("region")
+        if region and region != "Global":
+            region_counts[region] = region_counts.get(region, 0) + 1
+
+        # Funding source CEX
+        fs = ai.get("funding_source")
+        if fs:
+            funding_source_counts[fs] = funding_source_counts.get(fs, 0) + 1
+
+        # ENS names
+        ens_name = ai.get("ens_name")
+        if ens_name:
+            ens_count += 1
+            ens_wallets.append({
+                "address": row.get("address", ""),
+                "chain": row.get("chain", ""),
+                "ens_name": ens_name,
+                "est_net_worth_usd": row.get("est_net_worth_usd", 0),
+                "tier": row.get("tier", ""),
+            })
+
+        # NFTs
+        if ai.get("has_nfts"):
+            nft_holder_count += 1
+        if ai.get("has_blue_chip_nfts"):
+            blue_chip_count += 1
+            for col in ai.get("blue_chip_collections", []):
+                blue_chip_collections[col] = blue_chip_collections.get(col, 0) + 1
+
+        # Wallet age
+        age = ai.get("wallet_age_days")
+        if isinstance(age, int) and age >= 0:
+            wallet_ages.append(age)
+
+    # Sort by descending count
+    country_breakdown = sorted(country_counts.items(), key=lambda x: -x[1])
+    region_breakdown = sorted(region_counts.items(), key=lambda x: -x[1])
+    funding_breakdown = sorted(funding_source_counts.items(), key=lambda x: -x[1])
+    blue_chip_breakdown = sorted(blue_chip_collections.items(), key=lambda x: -x[1])
+    ens_wallets_top = sorted(ens_wallets, key=lambda x: -x["est_net_worth_usd"])[:20]
+
+    # Wallet age buckets
+    age_buckets = _build_wallet_age_buckets(wallet_ages)
+
+    enriched_count = sum(1 for _, row in df.iterrows()
+                         if isinstance(row.get("activity_indicators"), dict) and
+                         row["activity_indicators"].get("wallet_age_days") is not None)
+
+    return {
+        "has_data": enriched_count > 0,
+        "enriched_count": enriched_count,
+        "enriched_pct": f"{enriched_count / total * 100:.1f}" if total > 0 else "0.0",
+        # Country
+        "country_breakdown": country_breakdown,
+        "region_breakdown": region_breakdown,
+        "country_identified_count": sum(v for _, v in country_counts.items()),
+        # Funding sources
+        "funding_breakdown": funding_breakdown,
+        # ENS
+        "ens_count": ens_count,
+        "ens_pct": f"{ens_count / total * 100:.1f}" if total > 0 else "0.0",
+        "ens_wallets": ens_wallets_top,
+        # NFTs
+        "nft_holder_count": nft_holder_count,
+        "nft_holder_pct": f"{nft_holder_count / total * 100:.1f}" if total > 0 else "0.0",
+        "blue_chip_count": blue_chip_count,
+        "blue_chip_breakdown": blue_chip_breakdown,
+        # Wallet age
+        "avg_wallet_age_days": int(sum(wallet_ages) / len(wallet_ages)) if wallet_ages else None,
+        "wallet_age_count": len(wallet_ages),
+        "age_buckets": age_buckets,
+    }
+
+
+def _build_wallet_age_buckets(ages: list[int]) -> list[dict]:
+    """Group wallet ages into human-readable buckets."""
+    buckets = [
+        ("< 6 months",  0,    180),
+        ("6–12 months", 180,  365),
+        ("1–2 years",   365,  730),
+        ("2–3 years",   730,  1095),
+        ("3+ years",    1095, 99999),
+    ]
+    result = []
+    for label, lo, hi in buckets:
+        count = sum(1 for a in ages if lo <= a < hi)
+        if count > 0:
+            result.append({"range": label, "count": count})
+    return result
+
+
 def _build_persona_detail_table(df: pd.DataFrame) -> list[dict]:
     """Build persona detail table with confidence from persona_detail JSON."""
     rows = []
@@ -289,10 +410,103 @@ def _build_persona_detail_table(df: pd.DataFrame) -> list[dict]:
     return rows[:20]
 
 
+def _aggregate_cross_chain(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    When the same address was scanned on multiple chains, aggregate into one row per address:
+    - Sum financial values (USD net worth, stablecoins, tx count)
+    - Re-compute balance_score and investor_score from combined USD
+    - Upgrade tier if combined value crosses a higher threshold
+    - Add 'chains_with_assets' column listing chains where the wallet has holdings
+    - Add 'scan_chains' column listing all chains that were scanned for this address
+
+    Single-chain wallets pass through unchanged (only gains the two new columns).
+    """
+    if df.empty:
+        return df
+
+    addr_counts = df['address'].value_counts()
+    multi_addrs = set(addr_counts[addr_counts > 1].index)
+
+    # Add columns for all rows; single-chain wallets are simple
+    df = df.copy()
+    df['scan_chains'] = df['chain']
+    df['chains_with_assets'] = df.apply(
+        lambda r: r['chain'] if float(r.get('est_net_worth_usd', 0) or 0) > 0 else '', axis=1
+    )
+
+    if not multi_addrs:
+        return df
+
+    single_df = df[~df['address'].isin(multi_addrs)].copy()
+    multi_df = df[df['address'].isin(multi_addrs)]
+
+    aggregated = []
+    for address, group in multi_df.groupby('address'):
+        # Base row: chain with highest USD value
+        base = group.loc[group['est_net_worth_usd'].idxmax()].copy()
+
+        # Chains that were scanned
+        base['scan_chains'] = ', '.join(sorted(group['chain'].tolist()))
+
+        # Chains where there are actual holdings
+        has_value = group[group['est_net_worth_usd'].fillna(0) > 0]['chain'].tolist()
+        base['chains_with_assets'] = ', '.join(sorted(set(has_value))) if has_value else ''
+
+        # Sum financials
+        combined_usd = float(group['est_net_worth_usd'].fillna(0).sum())
+        combined_stable = float(group['stable_usd_total'].fillna(0).sum())
+        combined_tx = int(group['tx_count'].fillna(0).sum())
+        base['est_net_worth_usd'] = combined_usd
+        base['stable_usd_total'] = combined_stable
+        base['tx_count'] = combined_tx
+
+        # Re-compute balance_score from combined USD (same formula as scoring.py)
+        total_for_score = combined_usd + combined_stable
+        new_balance_score = min(round(math.log10(max(total_for_score, 1)) * 10, 1), 100.0) if total_for_score > 0 else 0.0
+        base['balance_score'] = new_balance_score
+
+        # Re-compute investor_score (keep other component scores from base chain)
+        w = {"balance": 0.30, "activity": 0.15, "defi": 0.25, "reputation": 0.20, "sybil": -0.10}
+        new_investor_score = min(max(round(
+            new_balance_score * w["balance"]
+            + float(base.get('activity_score', 0) or 0) * w["activity"]
+            + float(base.get('defi_investor_score', 0) or 0) * w["defi"]
+            + float(base.get('reputation_score', 0) or 0) * w["reputation"]
+            + float(base.get('sybil_risk_score', 0) or 0) * w["sybil"]
+        , 1), 0.0), 100.0)
+        base['investor_score'] = new_investor_score
+
+        # Re-determine tier if this is a USER wallet
+        if base.get('wallet_type') == 'USER':
+            if new_investor_score >= 55:
+                base['tier'] = 'Whale'
+            elif new_investor_score >= 30:
+                base['tier'] = 'Tuna'
+            else:
+                base['tier'] = 'Fish'
+
+        # If ANY chain classified this as CEX/infra, use that type
+        wt_priority = ['CEX_EXCHANGE', 'DEX_ROUTER', 'BRIDGE', 'PROTOCOL', 'CONTRACT', 'UNKNOWN', 'USER']
+        for wt in wt_priority:
+            if wt in group['wallet_type'].values:
+                base['wallet_type'] = wt
+                break
+
+        aggregated.append(base)
+
+    agg_df = pd.DataFrame(aggregated)
+    return pd.concat([single_df, agg_df], ignore_index=True)
+
+
 def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown') -> str:
     """Generates the full executive intelligence report with narrative-first structure."""
 
-    total_wallets = len(df)
+    # Aggregate cross-chain scans: one row per unique address with combined financials
+    scans_count = len(df)  # total individual chain scans submitted
+    df = _aggregate_cross_chain(df)
+    total_wallets = len(df)  # unique addresses after aggregation
+    is_multi_chain = scans_count > total_wallets  # True when multi-chain scanning was used
+    failed_count = int(df['notes'].fillna('').str.startswith('Analysis failed:').sum()) if 'notes' in df.columns else 0
     tier_dist = df['tier'].value_counts()
     total_usd = df['est_net_worth_usd'].sum()
     chain_dist = df['chain'].value_counts()
@@ -358,6 +572,9 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     # --- Intent Signals Aggregation ---
     intent_agg = _aggregate_intent_signals(df)
 
+    # --- Identity & Geographic Intelligence ---
+    identity_agg = _aggregate_identity_data(df)
+
     # --- Persona Detail Table ---
     persona_detail_table = _build_persona_detail_table(df)
 
@@ -400,10 +617,36 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     else:
         plots["persona_dist_pie"] = None
 
-    table_cols_score = ['address', 'chain', 'tier', 'investor_score', 'persona', 'est_net_worth_usd', 'wallet_type']
-    table_cols_whales = ['address', 'chain', 'tier', 'est_net_worth_usd', 'stable_usd_total', 'wallet_type', 'labels_str']
-    table_cols_infra = ['address', 'chain', 'labels_str', 'est_net_worth_usd', 'confidence']
-    table_cols_sybil = ['address', 'chain', 'tx_count', 'est_net_worth_usd', 'sybil_risk_score', 'wallet_type']
+    # Extract ENS name from activity_indicators into a display column
+    def _get_ens(row):
+        ai = row.get('activity_indicators')
+        if isinstance(ai, dict):
+            return ai.get('ens_name') or ''
+        return ''
+    df['ens_name'] = df.apply(_get_ens, axis=1)
+
+    def _get_country(row):
+        ai = row.get('activity_indicators')
+        if isinstance(ai, dict):
+            return ai.get('country_hint') or ''
+        return ''
+    df['country_hint'] = df.apply(_get_country, axis=1)
+
+    def _get_wallet_age(row):
+        ai = row.get('activity_indicators')
+        if isinstance(ai, dict):
+            age = ai.get('wallet_age_days')
+            if age is not None:
+                return f"{age // 365}y {(age % 365) // 30}m" if age >= 365 else f"{age // 30}m"
+        return ''
+    df['wallet_age'] = df.apply(_get_wallet_age, axis=1)
+
+    _available = set(df.columns.tolist())
+    def _cols(*cols): return [c for c in cols if c in _available]
+    table_cols_score = _cols('address', 'chains_with_assets', 'tier', 'investor_score', 'persona', 'est_net_worth_usd', 'wallet_type', 'ens_name')
+    table_cols_whales = _cols('address', 'chains_with_assets', 'tier', 'est_net_worth_usd', 'stable_usd_total', 'wallet_type', 'labels_str', 'ens_name')
+    table_cols_infra = _cols('address', 'chain', 'labels_str', 'est_net_worth_usd', 'confidence')
+    table_cols_sybil = _cols('address', 'chain', 'tx_count', 'est_net_worth_usd', 'sybil_risk_score', 'wallet_type')
 
     context = {
         "project_name": project_name,
@@ -411,6 +654,9 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
         "reference_id": generate_reference_id(job_id),
         "generation_date": pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S UTC'),
         "total_wallets": total_wallets,
+        "scans_count": scans_count,
+        "is_multi_chain": is_multi_chain,
+        "failed_count": failed_count,
         "total_usd_controlled": f"${total_usd:,.2f}",
         "chain_count": len(chain_dist),
         # Wallet type counts
@@ -441,10 +687,11 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
             "sybil_risk_count": len(sybil_risk_wallets),
         },
         "tables": {
-            "top_by_score": top_by_score_df[table_cols_score].to_dict('records') if len(top_by_score_df) > 0 else [],
-            "top_whales": top_whales[table_cols_whales].to_dict('records') if len(top_whales) > 0 else [],
+            "top_by_score": top_by_score_df[[c for c in table_cols_score if c in top_by_score_df.columns]].to_dict('records') if len(top_by_score_df) > 0 else [],
+            "top_whales": top_whales[[c for c in table_cols_whales if c in top_whales.columns]].to_dict('records') if len(top_whales) > 0 else [],
             "high_activity_low_balance": high_activity_low_balance[table_cols_sybil].to_dict('records') if len(high_activity_low_balance) > 0 else [],
             "chain_breakdown": chain_breakdown_df.to_dict('records'),
+            "failed_wallets": df[df['notes'].fillna('').str.startswith('Analysis failed:')][['address', 'chain', 'notes']].to_dict('records') if failed_count > 0 else [],
             "cex_wallets": cex_wallets[table_cols_infra].to_dict('records') if len(cex_wallets) > 0 else [],
             "dex_wallets": dex_wallets[['address', 'chain', 'labels_str', 'confidence']].to_dict('records') if len(dex_wallets) > 0 else [],
             "bridge_wallets": bridge_wallets[table_cols_infra].to_dict('records') if len(bridge_wallets) > 0 else [],
@@ -465,6 +712,8 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
         "token_intel": token_intel_agg,
         # Intent Signals Aggregation
         "intent_agg": intent_agg,
+        # Identity & Geographic Intelligence
+        "identity_agg": identity_agg,
     }
 
     template = jinja_env.get_template('report_template.md')

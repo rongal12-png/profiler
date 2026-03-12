@@ -8,7 +8,10 @@
 
 ## 1. Executive Summary — Company View
 
-This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** addresses across {{ chain_count }} chain{{ "s" if chain_count > 1 else "" }}. The total estimated value controlled by these wallets is **{{ total_usd_controlled }}**.
+This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** unique addresses{% if is_multi_chain %} ({{ scans_count }} cross-chain scans aggregated){% else %} across {{ chain_count }} chain{{ "s" if chain_count > 1 else "" }}{% endif %}. The total estimated value controlled by these wallets is **{{ total_usd_controlled }}**.
+{% if is_multi_chain %}
+> **Multi-Chain Scan:** Each wallet's holdings were aggregated across all scanned networks. A wallet holding assets on both Ethereum and Base appears as a single entry with combined net worth. The "Chains with Holdings" column in the appendix tables shows which networks each wallet is active on.
+{% endif %}
 
 {% if user_count > 0 %}
 Of the {{ total_wallets }} wallets analyzed, **{{ user_count }}** ({{ user_pct }}%) are classified as real end-users (EOA wallets not associated with infrastructure). These are the wallets that represent genuine engagement with {{ project_name }}. The remaining **{{ infra_total }}** wallet{{ "s" if infra_total != 1 else "" }} belong to infrastructure: {{ cex_count }} centralized exchange{{ "s" if cex_count != 1 else "" }} (CEX), {{ dex_count }} DEX router{{ "s" if dex_count != 1 else "" }}, {{ bridge_count }} bridge{{ "s" if bridge_count != 1 else "" }}, {{ protocol_count }} protocol/contract address{{ "es" if protocol_count != 1 else "" }}, and {{ contract_count }} unlabeled smart contract{{ "s" if contract_count != 1 else "" }}.
@@ -26,7 +29,7 @@ The average investor quality score across all real users is **{{ avg_investor_sc
 
 | Metric | Value |
 |---|---|
-| **Total Wallets Analyzed** | {{ total_wallets }} |
+| **Total Wallets Analyzed** | {{ total_wallets }}{% if failed_count > 0 %} (⚠ {{ failed_count }} failed — see note below){% endif %} |
 | **Real Users** | {{ user_count }} ({{ user_pct }}%) |
 | **Infrastructure Wallets** | {{ infra_total }} (CEX: {{ cex_count }}, DEX: {{ dex_count }}, Bridge: {{ bridge_count }}, Protocol: {{ protocol_count }}, Contract: {{ contract_count }}) |
 | **Total Estimated USD** | {{ total_usd_controlled }} |
@@ -45,6 +48,10 @@ The average investor quality score across all real users is **{{ avg_investor_sc
 {% if plots.chain_dist_bar %}
 ### Chain Distribution
 ![Chain Distribution](data:image/png;base64,{{ plots.chain_dist_bar }})
+{% endif %}
+
+{% if failed_count > 0 %}
+> **⚠ Data Notice:** {{ failed_count }} wallet{{ "s" if failed_count != 1 else "" }} could not be scanned due to RPC connection failures and {{ "are" if failed_count != 1 else "is" }} excluded from all analysis. {{ "These wallets are" if failed_count != 1 else "This wallet is" }} listed in the appendix. Re-running the analysis may recover them if the connection issue was transient.
 {% endif %}
 
 ---
@@ -126,7 +133,81 @@ Each wallet is assigned a primary persona based on behavioral signals. Understan
 
 ---
 
-## 4. Investment Intelligence
+## 4. Identity Intelligence
+
+{% if identity_agg.has_data %}
+This section provides enriched identity data derived from on-chain signals: ENS names, wallet funding source, NFT holdings, and wallet age. These signals are probabilistic — they indicate likely characteristics, not verified facts.
+
+**Coverage:** {{ identity_agg.enriched_count }} of {{ total_wallets }} wallets enriched ({{ identity_agg.enriched_pct }}%).
+
+{% if identity_agg.funding_breakdown %}
+### Funding Source Exchanges
+
+Wallets whose original funding transaction came from a known centralized exchange:
+
+| Exchange | Wallets Funded |
+|---|---|
+{% for cex, count in identity_agg.funding_breakdown %}
+| {{ cex }} | {{ count }} |
+{% endfor %}
+{% endif %}
+
+{% if identity_agg.ens_count > 0 %}
+### ENS Identity (Ethereum)
+
+**{{ identity_agg.ens_count }}** wallets ({{ identity_agg.ens_pct }}%) have a registered ENS name, indicating established on-chain identity and a higher likelihood of being genuine long-term Ethereum participants.
+
+| Wallet | ENS Name | Tier | Net Worth |
+|---|---|---|---|
+{% for w in identity_agg.ens_wallets %}
+| `{{ w.address }}` | **{{ w.ens_name }}** | {{ w.tier }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} |
+{% endfor %}
+{% endif %}
+
+{% if identity_agg.nft_holder_count > 0 %}
+### NFT Portfolio
+
+| Metric | Value |
+|---|---|
+| **NFT Holders** | {{ identity_agg.nft_holder_count }} ({{ identity_agg.nft_holder_pct }}% of total) |
+| **Blue-Chip NFT Holders** | {{ identity_agg.blue_chip_count }} |
+
+{% if identity_agg.blue_chip_breakdown %}
+**Blue-chip collections held:**
+
+| Collection | Holders |
+|---|---|
+{% for col, count in identity_agg.blue_chip_breakdown %}
+| {{ col }} | {{ count }} |
+{% endfor %}
+{% endif %}
+
+Blue-chip NFT holders (BAYC, CryptoPunks, MAYC, etc.) are typically high-net-worth, culturally engaged Web3 participants with long time horizons. They make excellent targets for premium community programs, exclusive access, and governance participation.
+{% endif %}
+
+{% if identity_agg.age_buckets %}
+### Wallet Age Distribution
+
+Older wallets (3+ years) represent seasoned on-chain participants who have been active since DeFi Summer or earlier. Newer wallets may indicate recent entrants brought in by the current cycle.
+
+| Age Range | Wallets |
+|---|---|
+{% for bucket in identity_agg.age_buckets %}
+| {{ bucket.range }} | {{ bucket.count }} |
+{% endfor %}
+
+{% if identity_agg.avg_wallet_age_days %}
+**Average wallet age:** {{ identity_agg.avg_wallet_age_days }} days (~{{ (identity_agg.avg_wallet_age_days / 365) | round(1) }} years).
+{% endif %}
+{% endif %}
+
+{% else %}
+*Identity enrichment data is not available for this report. This feature requires Alchemy RPC endpoints to retrieve funding source history, NFT data, and wallet age. ENS resolution requires an Ethereum RPC.*
+{% endif %}
+
+---
+
+## 5. Investment Intelligence
 
 This section analyzes investment readiness and intent signals across the wallet base.
 
@@ -153,7 +234,7 @@ This represents the combined stablecoin and liquid native token holdings across 
 
 ---
 
-## 5. Marketing & Growth Actions
+## 6. Marketing & Growth Actions
 
 This section translates the wallet intelligence into actionable strategies for each user tier.
 
@@ -189,7 +270,7 @@ Fish are your largest segment by count but smallest by value. Many are new to th
 
 ---
 
-## 6. Risk & Compliance View
+## 7. Risk & Compliance View
 
 A clear understanding of non-user wallets is essential for accurate analytics and risk management. Infrastructure wallets (exchanges, DEX routers, bridges, protocol contracts) must be separated from real users to avoid inflating engagement metrics and misallocating resources.
 
@@ -246,7 +327,7 @@ No wallets in this set matched any entries on the OFAC SDN, EU Consolidated, or 
 
 ---
 
-## 7. Data Tables (Appendix)
+## 8. Data Tables (Appendix)
 
 ### Wallet Type Breakdown
 
@@ -259,20 +340,20 @@ No wallets in this set matched any entries on the OFAC SDN, EU Consolidated, or 
 {% if tables.top_by_score %}
 ### Top 20 Wallets by Investor Score (Users Only)
 
-| Address | Chain | Tier | Score | Persona | Net Worth | Wallet Type |
+| Address | Chains with Holdings | Tier | Score | Persona | Net Worth | ENS |
 |---|---|---|---|---|---|---|
 {% for w in tables.top_by_score %}
-| `{{ w.address }}` | {{ w.chain }} | {{ w.tier }} | {{ w.investor_score }} | {{ w.persona }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} | {{ w.wallet_type }} |
+| `{{ w.address }}` | {{ w.chains_with_assets or w.get('chain', '-') }} | {{ w.tier }} | {{ w.investor_score }} | {{ w.persona }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} | {{ w.ens_name or '-' }} |
 {% endfor %}
 {% endif %}
 
 {% if tables.top_whales %}
 ### Top 20 Wallets by Net Worth
 
-| Address | Chain | Tier | Net Worth | Stablecoins | Wallet Type | Label |
+| Address | Chains with Holdings | Tier | Net Worth | Stablecoins | Label | ENS |
 |---|---|---|---|---|---|---|
 {% for w in tables.top_whales %}
-| `{{ w.address }}` | {{ w.chain }} | {{ w.tier }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} | ${{ "%.2f"|format(w.stable_usd_total) }} | {{ w.wallet_type }} | {{ w.labels_str }} |
+| `{{ w.address }}` | {{ w.chains_with_assets or w.get('chain', '-') }} | {{ w.tier }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} | ${{ "%.2f"|format(w.stable_usd_total) }} | {{ w.labels_str or '-' }} | {{ w.ens_name or '-' }} |
 {% endfor %}
 {% endif %}
 
@@ -326,6 +407,18 @@ No wallets in this set matched any entries on the OFAC SDN, EU Consolidated, or 
 {% endfor %}
 {% endif %}
 
+{% if failed_count > 0 %}
+### Failed Scans ({{ failed_count }} wallet{{ "s" if failed_count != 1 else "" }})
+
+The following wallets could not be analyzed due to RPC connection failures. Their data is not included in any counts or statistics above.
+
+| Address | Chain | Reason |
+|---|---|---|
+{% for w in tables.failed_wallets %}
+| `{{ w.address }}` | {{ w.chain }} | {{ w.notes }} |
+{% endfor %}
+{% endif %}
+
 ### Breakdown by Chain
 
 | Chain | Wallet Count | Total Est. Value (USD) | Avg Investor Score |
@@ -361,7 +454,7 @@ No wallets in this set matched any entries on the OFAC SDN, EU Consolidated, or 
 
 ---
 
-## 8. Recommendations
+## 9. Recommendations
 
 Based on this analysis, the following actions are recommended for {{ project_name }}:
 

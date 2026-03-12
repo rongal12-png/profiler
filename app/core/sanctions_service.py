@@ -32,10 +32,18 @@ def _normalize_address(address: str) -> str:
     return address.strip().lower()
 
 
+class SanctionsCheckError(Exception):
+    """Raised when sanctions check cannot be completed (DB error, etc.)."""
+    pass
+
+
 def check_address(address: str, db: Session | None = None) -> dict | None:
     """
     Check if an address appears on any sanctions list.
     Returns {list_name, entity_name, entity_type} or None.
+
+    C5: Raises SanctionsCheckError on DB failures instead of silently
+    returning None (which would be a false negative on a compliance path).
     """
     close_db = False
     if db is None:
@@ -44,6 +52,13 @@ def check_address(address: str, db: Session | None = None) -> dict | None:
 
     try:
         normalized = _normalize_address(address)
+
+        # Warn if no active sanctions lists exist (lists not yet downloaded)
+        active_count = db.query(SanctionsList).filter(SanctionsList.status == "active").count()
+        if active_count == 0:
+            logger.warning("No active sanctions lists found — run POST /admin/sanctions/update or wait for auto-update")
+            return None
+
         hit = (
             db.query(SanctionsAddress)
             .join(SanctionsList)
@@ -60,6 +75,10 @@ def check_address(address: str, db: Session | None = None) -> dict | None:
                 "entity_type": hit.entity_type,
             }
         return None
+    except Exception as e:
+        # C5: Do NOT silently return None on DB errors — that's a false negative
+        logger.error(f"Sanctions check failed for {address}: {e}")
+        raise SanctionsCheckError(f"Sanctions check failed: {e}") from e
     finally:
         if close_db:
             db.close()
@@ -172,12 +191,16 @@ def update_sanctions_list(list_name: str, db: Session | None = None) -> int:
         return len(addresses)
 
     except Exception as e:
-        if sl:
-            sl.status = "error"
-            try:
+        # M4: Rollback the entire transaction (including any deletes) on failure,
+        # then update status in a fresh transaction
+        db.rollback()
+        try:
+            sl_refresh = db.query(SanctionsList).filter(SanctionsList.list_name == list_name).first()
+            if sl_refresh:
+                sl_refresh.status = "error"
                 db.commit()
-            except Exception:
-                db.rollback()
+        except Exception:
+            db.rollback()
         raise
     finally:
         if close_db:
@@ -187,63 +210,76 @@ def update_sanctions_list(list_name: str, db: Session | None = None) -> int:
 def _parse_ofac_sdn(xml_bytes: bytes) -> list[dict]:
     """
     Parse OFAC SDN Advanced XML for crypto addresses.
-    Crypto addresses are in <Feature> elements with FeatureTypeID matching crypto types.
+    Auto-detects namespace from root element for resilience.
     """
+    import re as _re
     addresses = []
     try:
         root = ET.fromstring(xml_bytes)
-        ns = {"ns": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/ADVANCED_XML"}
+
+        # Auto-detect namespace from root tag (e.g., {http://...}Sanctions)
+        root_ns_match = _re.match(r'\{(.+?)\}', root.tag)
+        detected_ns = root_ns_match.group(1) if root_ns_match else ""
+        ns = {"ns": detected_ns} if detected_ns else {}
+        prefix = "ns:" if detected_ns else ""
+
+        logger.info(f"OFAC SDN: detected namespace = {detected_ns or '(none)'}")
 
         # Build lookup of crypto FeatureTypeIDs from ReferenceValueSets
         crypto_type_ids = set()
-        for feature_type in root.findall(".//ns:FeatureType", ns):
+        for feature_type in root.findall(f".//{prefix}FeatureType", ns):
             if feature_type.text and "Digital Currency Address" in feature_type.text:
                 type_id = feature_type.get("ID")
                 if type_id:
                     crypto_type_ids.add(type_id)
 
+        # Fallback: if XPath didn't find any, try raw iteration (handles nested namespaces)
+        if not crypto_type_ids:
+            for elem in root.iter():
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "FeatureType" and elem.text and "Digital Currency Address" in elem.text:
+                    type_id = elem.get("ID")
+                    if type_id:
+                        crypto_type_ids.add(type_id)
+
         logger.info(f"OFAC SDN: found {len(crypto_type_ids)} crypto FeatureType IDs")
 
-        # Iterate through all DistinctParty elements
-        for party in root.findall(".//ns:DistinctParty", ns):
+        if not crypto_type_ids:
+            logger.warning("OFAC SDN: no crypto FeatureType IDs found at all — XML structure may have changed")
+            return addresses
+
+        # Iterate through all DistinctParty elements using raw iteration for reliability
+        for party in root.iter():
+            tag = party.tag.split("}")[-1] if "}" in party.tag else party.tag
+            if tag != "DistinctParty":
+                continue
+
             party_id = party.get("FixedRef", "")
 
-            # Get entity name from primary Identity
+            # Get entity name
             entity_name = "Unknown"
-            for profile in party.findall(".//ns:Profile", ns):
-                for identity in profile.findall(".//ns:Identity[@Primary='true']", ns):
-                    for name_part_value in identity.findall(".//ns:NamePartValue", ns):
-                        if name_part_value.text:
-                            entity_name = name_part_value.text.strip()
-                            break
-                    if entity_name != "Unknown":
-                        break
-                if entity_name != "Unknown":
+            for child in party.iter():
+                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                if child_tag == "NamePartValue" and child.text:
+                    entity_name = child.text.strip()
                     break
 
-            # If no primary identity name, use first NamePartValue found
-            if entity_name == "Unknown":
-                for name_part_value in party.findall(".//ns:NamePartValue", ns):
-                    if name_part_value.text:
-                        entity_name = name_part_value.text.strip()
-                        break
-
-            # Find all Feature elements with crypto FeatureTypeID
-            for feature in party.findall(".//ns:Feature", ns):
-                feature_type_id = feature.get("FeatureTypeID", "")
-                if feature_type_id in crypto_type_ids:
-                    # Extract address from VersionDetail with DetailTypeID="1432"
-                    for version_detail in feature.findall(".//ns:VersionDetail[@DetailTypeID='1432']", ns):
-                        if version_detail.text:
-                            addr = version_detail.text.strip()
-                            # Basic validation: min length 26 chars
-                            if len(addr) >= 26:
-                                addresses.append({
-                                    "address": addr,
-                                    "entity_name": entity_name,
-                                    "entity_type": "OFAC_SDN",
-                                    "source_entry_id": party_id,
-                                })
+            # Find Features with crypto FeatureTypeID
+            for child in party.iter():
+                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                if child_tag == "Feature":
+                    ft_id = child.get("FeatureTypeID", "")
+                    if ft_id in crypto_type_ids:
+                        for detail in child.iter():
+                            detail_tag = detail.tag.split("}")[-1] if "}" in detail.tag else detail.tag
+                            if detail_tag == "VersionDetail" and detail.get("DetailTypeID") == "1432":
+                                if detail.text and len(detail.text.strip()) >= 26:
+                                    addresses.append({
+                                        "address": detail.text.strip(),
+                                        "entity_name": entity_name,
+                                        "entity_type": "OFAC_SDN",
+                                        "source_entry_id": party_id,
+                                    })
 
     except ET.ParseError as e:
         logger.error(f"Failed to parse OFAC SDN XML: {e}")

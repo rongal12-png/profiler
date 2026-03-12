@@ -2,7 +2,9 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 psycopg2-binary
-celery[redis]
+celery[redis,gevent]
+gevent
+redis
 python-dotenv
 requests
 web3
@@ -19,3 +21,4 @@ beautifulsoup4
 solana
 solders
 click
+python-multipart

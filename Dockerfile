@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 
 # Install in smaller batches to avoid I/O errors in Docker Desktop
-RUN pip install --no-cache-dir fastapi uvicorn[standard] sqlalchemy psycopg2-binary celery[redis]
+RUN pip install --no-cache-dir fastapi uvicorn[standard] sqlalchemy psycopg2-binary celery[redis] gevent
 RUN pip install --no-cache-dir python-dotenv requests pydantic pydantic-settings Jinja2 markdown2 click python-multipart
 RUN pip install --no-cache-dir web3
 RUN pip install --no-cache-dir solana solders

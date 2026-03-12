@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{% if lang == 'he' %}מדריך מערכת Wallet Intelligence{% else %}Wallet Intelligence System Guide{% endif %}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm 1.5cm;
+            @top-center {
+                content: "Wallet Intelligence System Guide";
+                font-size: 9pt;
+                color: #666;
+            }
+            @bottom-right {
+                content: counter(page);
+                font-size: 9pt;
+                color: #666;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+            {% if lang == 'he' %}direction: rtl; text-align: right;{% else %}direction: ltr; text-align: left;{% endif %}
+        }
+        h1 { font-size: 24pt; color: #1a1a1a; margin-bottom: 0.5cm; padding-bottom: 0.3cm; border-bottom: 3px solid #2563eb; }
+        h2 { font-size: 16pt; color: #1a1a1a; margin-top: 0.8cm; margin-bottom: 0.4cm; padding-bottom: 0.2cm; border-bottom: 2px solid #e5e7eb; page-break-after: avoid; }
+        h3 { font-size: 13pt; color: #374151; margin-top: 0.5cm; margin-bottom: 0.3cm; page-break-after: avoid; }
+        h4 { font-size: 11pt; color: #4b5563; margin-top: 0.3cm; margin-bottom: 0.2cm; page-break-after: avoid; }
+        p { margin-bottom: 0.3cm; }
+        .header { text-align: center; margin-bottom: 1cm; padding-bottom: 0.5cm; border-bottom: 3px solid #2563eb; }
+        .header h1 { border: none; }
+        .subtitle { font-size: 13pt; color: #6b7280; }
+        .section { margin-bottom: 0.8cm; }
+        .major-section { page-break-before: always; }
+        ul, ol {
+            {% if lang == 'he' %}margin-right: 0.8cm;{% else %}margin-left: 0.8cm;{% endif %}
+            margin-bottom: 0.3cm;
+        }
+        li { margin-bottom: 0.15cm; page-break-inside: avoid; }
+        table { width: 100%; border-collapse: collapse; margin: 0.4cm 0; page-break-inside: avoid; }
+        th { background-color: #f3f4f6; font-weight: bold; padding: 0.25cm; border: 1px solid #d1d5db;
+            text-align: {% if lang == 'he' %}right{% else %}left{% endif %}; }
+        td { padding: 0.2cm; border: 1px solid #e5e7eb;
+            text-align: {% if lang == 'he' %}right{% else %}left{% endif %}; }
+        tr:nth-child(even) { background-color: #f9fafb; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.4cm; margin: 0.3cm 0; page-break-inside: avoid; }
+        .card-blue { background: #eff6ff; border-color: #bfdbfe; }
+        .card-green { background: #f0fdf4; border-color: #bbf7d0; }
+        .card-yellow { background: #fefce8; border-color: #fde68a; }
+        .card-red { background: #fef2f2; border-color: #fecaca; }
+        .card-purple { background: #faf5ff; border-color: #e9d5ff; }
+        .formula { background: #1e293b; color: #e2e8f0; padding: 0.3cm; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 10pt; margin: 0.3cm 0; direction: ltr; text-align: left; }
+        code { background: #f1f5f9; padding: 0.05cm 0.15cm; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 10pt; }
+        .badge { display: inline-block; padding: 0.08cm 0.25cm; border-radius: 4px; font-size: 9pt; font-weight: bold; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-purple { background: #f3e8ff; color: #6b21a8; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .grid-2 { display: flex; flex-wrap: wrap; gap: 0.3cm; }
+        .grid-2 > div { flex: 1 1 45%; min-width: 7cm; }
+        .text-muted { color: #6b7280; font-size: 9pt; }
+        .footer { text-align: center; margin-top: 1cm; padding-top: 0.5cm; border-top: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>{% if lang == 'he' %}מדריך מערכת Wallet Intelligence{% else %}Wallet Intelligence System Guide{% endif %}</h1>
+    <p class="subtitle">{% if lang == 'he' %}הסבר מקיף על הניתוח, הציונים, הסיווגים והאינטליגנציה של המערכת{% else %}Comprehensive guide to analysis, scores, classifications, and intelligence{% endif %}</p>
+</div>
+
+<!-- Section 1: Overview -->
+<div class="section">
+    <h2>{% if lang == 'he' %}1. מה המערכת בודקת?{% else %}1. What Does the System Analyze?{% endif %}</h2>
+    <p>{% if lang == 'he' %}המערכת מנתחת ארנקי קריפטו ומספקת אינטליגנציה ברמת הקהילה וברמת הפרט.{% else %}The system analyzes crypto wallets and provides intelligence at both community and individual levels.{% endif %}</p>
+    <h3>{% if lang == 'he' %}תהליך הניתוח:{% else %}Analysis Process:{% endif %}</h3>
+    <ol>
+        <li><strong>{% if lang == 'he' %}קריאת נתוני בלוקצ'יין:{% else %}Blockchain Data Reading:{% endif %}</strong> {% if lang == 'he' %}יתרות, מספר עסקאות, טוקנים{% else %}balances, transaction count, tokens{% endif %}</li>
+        <li><strong>{% if lang == 'he' %}זיהוי זהות:{% else %}Identity Detection:{% endif %}</strong> {% if lang == 'he' %}משתמש, בורסה, חוזה חכם, גשר?{% else %}user, exchange, smart contract, bridge?{% endif %}</li>
+        <li><strong>{% if lang == 'he' %}ציון רב-ממדי:{% else %}Multi-Dimensional Scoring:{% endif %}</strong> {% if lang == 'he' %}5 רכיבים עם משקלים (סה"כ 0-100){% else %}5 components with weights (total 0-100){% endif %}</li>
+        <li><strong>{% if lang == 'he' %}סיווג רמה ופרסונה:{% else %}Tier & Persona Classification:{% endif %}</strong> Whale/Tuna/Fish/Infra + 10 {% if lang == 'he' %}פרסונות{% else %}personas{% endif %}</li>
+        <li><strong>{% if lang == 'he' %}ניתוח החזקות:{% else %}Holdings Analysis:{% endif %}</strong> native, stablecoin, staked, governance</li>
+        <li><strong>{% if lang == 'he' %}אותות כוונות השקעה:{% else %}Investment Intent Signals:{% endif %}</strong> 6 {% if lang == 'he' %}סיגנלים{% else %}signals{% endif %}</li>
+        <li><strong>{% if lang == 'he' %}ניקוד קהילה:{% else %}Community Scoring:{% endif %}</strong> 0-100 {% if lang == 'he' %}עם דירוג אותיות (A+ עד F){% else %}with letter grades (A+ to F){% endif %}</li>
+        <li><strong>{% if lang == 'he' %}בדיקת סנקציות:{% else %}Sanctions Screening:{% endif %}</strong> OFAC, EU, Israel</li>
+        <li><strong>{% if lang == 'he' %}דגלי בריאות וסיכון:{% else %}Health & Risk Flags:{% endif %}</strong> Sybil, {% if lang == 'he' %}תשתית, סנקציות{% else %}infrastructure, sanctions{% endif %}</li>
+    </ol>
+</div>
+
+<!-- Section 2: Scoring System -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}2. מערכת הציונים{% else %}2. Scoring System{% endif %}</h2>
+    <p>{% if lang == 'he' %}כל ארנק מקבל ציון משקיע (Investor Score) בין 0-100, המורכב מ-5 רכיבים:{% else %}Each wallet receives an Investor Score between 0-100, composed of 5 components:{% endif %}</p>
+
+    <div class="card card-green">
+        <h3>1. Balance Score (30%)</h3>
+        <p>{% if lang == 'he' %}ציון לוגריתמי מבוסס על שווי נטו בדולרים:{% else %}Logarithmic score based on net worth in USD:{% endif %}</p>
+        <div class="formula">min(100, 20 * log10(max(1, net_worth_usd)))</div>
+        <table>
+            <tr><th>{% if lang == 'he' %}טווח שווי{% else %}Value Range{% endif %}</th><th>{% if lang == 'he' %}ציון{% else %}Score{% endif %}</th></tr>
+            <tr><td>$0 - $100</td><td>0-20</td></tr>
+            <tr><td>$100 - $1K</td><td>20-40</td></tr>
+            <tr><td>$1K - $10K</td><td>40-60</td></tr>
+            <tr><td>$10K - $100K</td><td>60-80</td></tr>
+            <tr><td>$100K+</td><td>80-100</td></tr>
+        </table>
+    </div>
+
+    <div class="card card-blue">
+        <h3>2. Activity Score (15%)</h3>
+        <p>{% if lang == 'he' %}ציון לוגריתמי מבוסס על מספר עסקאות:{% else %}Logarithmic score based on transaction count:{% endif %}</p>
+        <div class="formula">min(100, 25 * log10(max(1, tx_count)))</div>
+        <table>
+            <tr><th>{% if lang == 'he' %}טרנזקציות{% else %}Transactions{% endif %}</th><th>{% if lang == 'he' %}ציון{% else %}Score{% endif %}</th></tr>
+            <tr><td>0-10</td><td>0-20</td></tr>
+            <tr><td>10-50</td><td>20-40</td></tr>
+            <tr><td>50-200</td><td>40-60</td></tr>
+            <tr><td>200-1,000</td><td>60-80</td></tr>
+            <tr><td>1,000+</td><td>80-100</td></tr>
+        </table>
+    </div>
+
+    <div class="card card-purple">
+        <h3>3. DeFi Investor Score (25%)</h3>
+        <p>{% if lang == 'he' %}מבוסס על מגוון טוקנים:{% else %}Based on token diversity:{% endif %}</p>
+        <div class="formula">min(100, 33 * log10(max(1, token_count)))</div>
+        <table>
+            <tr><th>{% if lang == 'he' %}טוקנים{% else %}Tokens{% endif %}</th><th>{% if lang == 'he' %}ציון{% else %}Score{% endif %}</th></tr>
+            <tr><td>0-1</td><td>0-20</td></tr>
+            <tr><td>2-3</td><td>20-40</td></tr>
+            <tr><td>4-6</td><td>40-60</td></tr>
+            <tr><td>7-10</td><td>60-80</td></tr>
+            <tr><td>10+</td><td>80-100</td></tr>
+        </table>
+    </div>
+
+    <div class="card card-yellow">
+        <h3>4. Reputation Score (20%)</h3>
+        <p>{% if lang == 'he' %}מבוסס על תוויות מוכרות:{% else %}Based on known labels:{% endif %}</p>
+        <table>
+            <tr><th>{% if lang == 'he' %}סוג{% else %}Type{% endif %}</th><th>{% if lang == 'he' %}ציון{% else %}Score{% endif %}</th></tr>
+            <tr><td>VC / KOL / Protocol</td><td>90-100</td></tr>
+            <tr><td>High Activity (200+ tx)</td><td>75</td></tr>
+            <tr><td>DEX Router / Bridge</td><td>70</td></tr>
+            <tr><td>CEX Exchange</td><td>60</td></tr>
+            <tr><td>Unknown</td><td>50</td></tr>
+            <tr><td>Inactive Holder</td><td>40</td></tr>
+            <tr><td>Smart Contract</td><td>30</td></tr>
+        </table>
+    </div>
+
+    <div class="card card-red">
+        <h3>5. Sybil Risk Score (-10%)</h3>
+        <p>{% if lang == 'he' %}יתרה נמוכה + פעילות גבוהה = חשד ל-Sybil:{% else %}Low balance + high activity = Sybil suspicion:{% endif %}</p>
+        <table>
+            <tr><th>{% if lang == 'he' %}תנאי{% else %}Condition{% endif %}</th><th>{% if lang == 'he' %}ציון{% else %}Score{% endif %}</th></tr>
+            <tr><td>net_worth &lt; $100 AND tx &gt; 50</td><td>60-80</td></tr>
+            <tr><td>net_worth &lt; $10</td><td>90</td></tr>
+            <tr><td>{% if lang == 'he' %}אחר{% else %}Otherwise{% endif %}</td><td>0</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>{% if lang == 'he' %}חישוב הציון הכולל:{% else %}Total Score Calculation:{% endif %}</h3>
+        <div class="formula">(Balance × 0.30) + (Activity × 0.15) + (DeFi × 0.25) + (Reputation × 0.20) + (Sybil × -0.10)</div>
+        <p class="text-muted">{% if lang == 'he' %}* המשקלים ניתנים לשינוי דרך Admin Dashboard{% else %}* Weights are configurable via the Admin Dashboard{% endif %}</p>
+    </div>
+</div>
+
+<!-- Section 3: Tiers -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}3. סיווג רמות (Tiers){% else %}3. Tier Classification{% endif %}</h2>
+    <p>{% if lang == 'he' %}רמות חלות רק על ארנקי USER. ארנקי תשתית מסווגים תמיד כ-Infra.{% else %}Tiers apply only to USER wallets. Infrastructure wallets are always classified as Infra.{% endif %}</p>
+
+    <div class="grid-2">
+        <div class="card card-purple">
+            <h3>🐋 Whale ({% if lang == 'he' %}ציון{% else %}Score{% endif %} ≥ 55)</h3>
+            <p>{% if lang == 'he' %}משקיעים גדולים עם נכסים משמעותיים ופעילות DeFi.{% else %}Large investors with significant assets and DeFi activity.{% endif %}</p>
+            <p>{% if lang == 'he' %}דוגמה: שווי $100K+, 200+ עסקאות, 7+ טוקנים{% else %}Example: Net worth $100K+, 200+ transactions, 7+ tokens{% endif %}</p>
+        </div>
+        <div class="card card-blue">
+            <h3>🐟 Tuna ({% if lang == 'he' %}ציון{% else %}Score{% endif %} 30-54)</h3>
+            <p>{% if lang == 'he' %}משקיעים בינוניים עם פעילות סבירה.{% else %}Mid-tier investors with reasonable activity.{% endif %}</p>
+            <p>{% if lang == 'he' %}דוגמה: שווי $5K-50K, 50-200 עסקאות{% else %}Example: Net worth $5K-50K, 50-200 transactions{% endif %}</p>
+        </div>
+        <div class="card">
+            <h3>🐠 Fish ({% if lang == 'he' %}ציון{% else %}Score{% endif %} &lt; 30)</h3>
+            <p>{% if lang == 'he' %}משקיעים קטנים, מתחילים, או ארנקי dust.{% else %}Small investors, newcomers, or dust wallets.{% endif %}</p>
+        </div>
+        <div class="card card-yellow">
+            <h3>⚙️ Infra ({% if lang == 'he' %}תשתית{% else %}Infrastructure{% endif %})</h3>
+            <p>{% if lang == 'he' %}CEX, DEX, BRIDGE, PROTOCOL או CONTRACT. לא מקבלים ציון משקיע.{% else %}CEX, DEX, BRIDGE, PROTOCOL or CONTRACT. Do not receive investor scores.{% endif %}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Section 4: Wallet Types -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}4. סוגי ארנקים{% else %}4. Wallet Types{% endif %}</h2>
+    <p>{% if lang == 'he' %}7 סוגי ארנקים מזוהים דרך 3 שכבות:{% else %}7 wallet types identified through 3 detection layers:{% endif %}</p>
+
+    <div class="card card-green">
+        <h4>{% if lang == 'he' %}שכבה A: JSON Labels{% else %}Layer A: JSON Labels{% endif %}</h4>
+        <p>{% if lang == 'he' %}בדיקה מול רשימת כתובות מוכרות: CEX_EXCHANGE, DEX_ROUTER, BRIDGE, PROTOCOL, VC, KOL{% else %}Check against known address list: CEX_EXCHANGE, DEX_ROUTER, BRIDGE, PROTOCOL, VC, KOL{% endif %}</p>
+    </div>
+    <div class="card card-blue">
+        <h4>{% if lang == 'he' %}שכבה B: Contract Detection{% else %}Layer B: Contract Detection{% endif %}</h4>
+        <p>{% if lang == 'he' %}אם יש bytecode → CONTRACT{% else %}If bytecode exists → CONTRACT{% endif %}</p>
+    </div>
+    <div class="card card-purple">
+        <h4>{% if lang == 'he' %}שכבה C: Heuristic Fallback{% else %}Layer C: Heuristic Fallback{% endif %}</h4>
+        <p>{% if lang == 'he' %}5000+ עסקאות + אין קוד → DEX_ROUTER חשוד, אחרת → USER{% else %}5000+ transactions + no code → suspected DEX_ROUTER, otherwise → USER{% endif %}</p>
+    </div>
+    <div class="card card-red">
+        <h4>{% if lang == 'he' %}שכבה D: זיהוי יתרה גבוהה{% else %}Layer D: High-Balance Heuristic{% endif %}</h4>
+        <p>{% if lang == 'he' %}ארנק EOA (לא חוזה) עם יתרה מאוד גבוהה — כמעט בוודאות ארנק בורסה או גוף מוסדי, לא משתמש בודד:{% else %}EOA wallet (not a contract) with very high balance — almost certainly an exchange or institutional custodian, not an individual:{% endif %}</p>
+        <ul>
+            <li>{% if lang == 'he' %}שווי ≥ $10M + 1,000+ עסקאות → <strong>CEX_EXCHANGE</strong> (ביטחון 80%){% else %}Net worth ≥ $10M AND 1,000+ transactions → <strong>CEX_EXCHANGE</strong> (80% confidence){% endif %}</li>
+            <li>{% if lang == 'he' %}שווי ≥ $50M (ללא קשר לעסקאות) → <strong>CEX_EXCHANGE</strong> (ביטחון 85%){% else %}Net worth ≥ $50M (regardless of tx count) → <strong>CEX_EXCHANGE</strong> (85% confidence){% endif %}</li>
+        </ul>
+        <p class="text-muted">{% if lang == 'he' %}שכבה זו מכסה ארנקי בורסות שלא מופיעים ברשימת ה-Labels הידועה.{% else %}This layer catches exchange wallets not yet in the known labels list.{% endif %}</p>
+    </div>
+
+    <table>
+        <tr><th>{% if lang == 'he' %}סוג{% else %}Type{% endif %}</th><th>{% if lang == 'he' %}תיאור{% else %}Description{% endif %}</th><th>{% if lang == 'he' %}דוגמאות{% else %}Examples{% endif %}</th></tr>
+        <tr><td>USER</td><td>{% if lang == 'he' %}משתמש רגיל{% else %}Regular user{% endif %}</td><td>{% if lang == 'he' %}ארנקים אישיים{% else %}Personal wallets{% endif %}</td></tr>
+        <tr><td>CEX_EXCHANGE</td><td>{% if lang == 'he' %}בורסה מרכזית{% else %}Centralized exchange{% endif %}</td><td>Binance, Coinbase, Kraken</td></tr>
+        <tr><td>DEX_ROUTER</td><td>{% if lang == 'he' %}נתב DEX{% else %}DEX router{% endif %}</td><td>Uniswap Router, 1inch</td></tr>
+        <tr><td>BRIDGE</td><td>{% if lang == 'he' %}גשר בין רשתות{% else %}Cross-chain bridge{% endif %}</td><td>Stargate, Wormhole</td></tr>
+        <tr><td>PROTOCOL</td><td>{% if lang == 'he' %}פרוטוקול DeFi{% else %}DeFi protocol{% endif %}</td><td>Aave, Compound, Lido</td></tr>
+        <tr><td>CONTRACT</td><td>{% if lang == 'he' %}חוזה חכם כללי{% else %}Generic smart contract{% endif %}</td><td>{% if lang == 'he' %}טוקנים, NFTs{% else %}Tokens, NFTs{% endif %}</td></tr>
+        <tr><td>UNKNOWN</td><td>{% if lang == 'he' %}לא ידוע{% else %}Unknown{% endif %}</td><td>{% if lang == 'he' %}לא זוהה{% else %}Not identified{% endif %}</td></tr>
+    </table>
+</div>
+
+<!-- Section 5: Personas -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}5. פרסונות משתמשים{% else %}5. User Personas{% endif %}</h2>
+    <p>{% if lang == 'he' %}המערכת מזהה 10 פרסונות שונות:{% else %}The system identifies 10 distinct personas:{% endif %}</p>
+
+    <table>
+        <tr><th>{% if lang == 'he' %}פרסונה{% else %}Persona{% endif %}</th><th>{% if lang == 'he' %}תנאי{% else %}Condition{% endif %}</th><th>{% if lang == 'he' %}אמינות{% else %}Confidence{% endif %}</th></tr>
+        <tr><td>🐋 Whale Investor</td><td>{% if lang == 'he' %}ציון ≥ 70 וגם שווי ≥ $100K{% else %}Score ≥ 70 AND net worth ≥ $100K{% endif %}</td><td>0.95</td></tr>
+        <tr><td>🦾 DeFi Native</td><td>{% if lang == 'he' %}ציון DeFi ≥ 60 וגם 5+ טוקנים{% else %}DeFi score ≥ 60 AND 5+ tokens{% endif %}</td><td>0.85</td></tr>
+        <tr><td>🔒 Staker</td><td>{% if lang == 'he' %}מעל 30% מהאחזקות ב-staked{% else %}Over 30% of holdings in staked assets{% endif %}</td><td>0.80</td></tr>
+        <tr><td>🗳️ Governance Participant</td><td>{% if lang == 'he' %}מחזיק UNI/AAVE/LDO/MKR{% else %}Holds UNI/AAVE/LDO/MKR{% endif %}</td><td>0.75</td></tr>
+        <tr><td>📊 Active Trader</td><td>{% if lang == 'he' %}200+ עסקאות וגם Activity ≥ 60{% else %}200+ tx AND Activity ≥ 60{% endif %}</td><td>0.70</td></tr>
+        <tr><td>💵 Stablecoin Holder</td><td>{% if lang == 'he' %}מעל 60% מהשווי בסטייבלקוין{% else %}Over 60% of value in stablecoins{% endif %}</td><td>0.65</td></tr>
+        <tr><td>🆕 Newcomer</td><td>{% if lang == 'he' %}עד 5 עסקאות ושווי &lt; $1K{% else %}Up to 5 tx and worth &lt; $1K{% endif %}</td><td>0.60</td></tr>
+        <tr><td>🚜 Sybil/Farmer</td><td>{% if lang == 'he' %}סיכון Sybil ≥ 60{% else %}Sybil risk ≥ 60{% endif %}</td><td>0.80</td></tr>
+        <tr><td>💤 Passive Investor</td><td>{% if lang == 'he' %}פחות מ-20 עסקאות ושווי ≥ $5K{% else %}&lt; 20 tx and worth ≥ $5K{% endif %}</td><td>0.55</td></tr>
+        <tr><td>👤 Casual User</td><td>{% if lang == 'he' %}ברירת מחדל{% else %}Default{% endif %}</td><td>0.50</td></tr>
+    </table>
+</div>
+
+<!-- Section 6: Community Score -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}6. ניקוד קהילה{% else %}6. Community Score{% endif %}</h2>
+    <p>{% if lang == 'he' %}ציון ברמת הפרוייקט (0-100) עם דירוג אותיות (A+ עד F), מורכב מ-5 רכיבים:{% else %}Project-level score (0-100) with letter grades (A+ to F), composed of 5 components:{% endif %}</p>
+
+    <table>
+        <tr><th>{% if lang == 'he' %}רכיב{% else %}Component{% endif %}</th><th>{% if lang == 'he' %}משקל{% else %}Weight{% endif %}</th><th>{% if lang == 'he' %}תיאור{% else %}Description{% endif %}</th></tr>
+        <tr><td>User Ratio</td><td>30%</td><td>{% if lang == 'he' %}אחוז משתמשים אמיתיים (לא תשתית){% else %}Percentage of real users (not infrastructure){% endif %}</td></tr>
+        <tr><td>Investor Quality</td><td>25%</td><td>{% if lang == 'he' %}ממוצע ציון המשקיעים{% else %}Average investor score{% endif %}</td></tr>
+        <tr><td>Diversity</td><td>15%</td><td>{% if lang == 'he' %}אנטרופיית Shannon של הפרסונות{% else %}Shannon entropy of personas{% endif %}</td></tr>
+        <tr><td>Whale Presence</td><td>15%</td><td>{% if lang == 'he' %}נקודה מתוקה: 5-15% Whales{% else %}Sweet spot: 5-15% Whales{% endif %}</td></tr>
+        <tr><td>Health Signals</td><td>15%</td><td>{% if lang == 'he' %}היפוך של יחס Sybil + סנקציות{% else %}Inverse of Sybil ratio + sanctions{% endif %}</td></tr>
+    </table>
+
+    <h3>{% if lang == 'he' %}דירוגי אותיות:{% else %}Letter Grades:{% endif %}</h3>
+    <table>
+        <tr><th>{% if lang == 'he' %}טווח{% else %}Range{% endif %}</th><th>{% if lang == 'he' %}דירוג{% else %}Grade{% endif %}</th></tr>
+        <tr><td>90-100</td><td><strong>A+</strong></td></tr>
+        <tr><td>85-89</td><td><strong>A</strong></td></tr>
+        <tr><td>80-84</td><td><strong>A-</strong></td></tr>
+        <tr><td>75-79</td><td>B+</td></tr>
+        <tr><td>70-74</td><td>B</td></tr>
+        <tr><td>65-69</td><td>B-</td></tr>
+        <tr><td>60-64</td><td>C+</td></tr>
+        <tr><td>55-59</td><td>C</td></tr>
+        <tr><td>50-54</td><td>C-</td></tr>
+        <tr><td>40-49</td><td>D</td></tr>
+        <tr><td>0-39</td><td><strong>F</strong></td></tr>
+    </table>
+</div>
+
+<!-- Section 7: Token Intelligence -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}7. אינטליגנציה על אחזקות{% else %}7. Token Intelligence (Holdings){% endif %}</h2>
+    <p>{% if lang == 'he' %}המערכת מסווגת טוקנים ל-4 קטגוריות:{% else %}The system classifies tokens into 4 categories:{% endif %}</p>
+
+    <table>
+        <tr><th>{% if lang == 'he' %}קטגוריה{% else %}Category{% endif %}</th><th>{% if lang == 'he' %}דוגמאות{% else %}Examples{% endif %}</th><th>{% if lang == 'he' %}משמעות{% else %}Meaning{% endif %}</th></tr>
+        <tr><td>🔷 Native</td><td>ETH, SOL, MATIC</td><td>{% if lang == 'he' %}הטוקן של הרשת{% else %}Chain's native token{% endif %}</td></tr>
+        <tr><td>💵 Stablecoin</td><td>USDC, USDT, DAI</td><td>{% if lang == 'he' %}מטבעות יציבים{% else %}Stable currencies{% endif %}</td></tr>
+        <tr><td>🔒 Staked</td><td>stETH, rETH, cbETH</td><td>{% if lang == 'he' %}נכסים ב-staking{% else %}Staked assets{% endif %}</td></tr>
+        <tr><td>🗳️ Governance</td><td>UNI, AAVE, LDO, MKR</td><td>{% if lang == 'he' %}טוקני גוברננס{% else %}Governance tokens{% endif %}</td></tr>
+    </table>
+
+    <h3>{% if lang == 'he' %}מטריקות ריכוז:{% else %}Concentration Metrics:{% endif %}</h3>
+    <ul>
+        <li><strong>HHI:</strong> {% if lang == 'he' %}מדד ריכוז (0-1). 0 = מפוזר, 1 = מרוכז בנכס יחיד{% else %}Concentration index (0-1). 0 = diversified, 1 = concentrated in single asset{% endif %}</li>
+        <li><strong>Stablecoin Share:</strong> {% if lang == 'he' %}אחוז השווי בסטייבלקוין. >60% = "Dry Powder"{% else %}Percentage of value in stablecoins. >60% = "Dry Powder"{% endif %}</li>
+        <li><strong>Staked Share:</strong> {% if lang == 'he' %}אחוז השווי ב-staking. >30% = Staker{% else %}Percentage of value in staking. >30% = Staker{% endif %}</li>
+        <li><strong>Gini Coefficient:</strong> {% if lang == 'he' %}מדד אי-שוויון (0-1). >0.6 = מרוכז{% else %}Inequality measure (0-1). >0.6 = concentrated{% endif %}</li>
+    </ul>
+</div>
+
+<!-- Section 8: Investment Intent -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}8. אותות כוונות השקעה{% else %}8. Investment Intent Signals{% endif %}</h2>
+
+    <table>
+        <tr><th>{% if lang == 'he' %}סיגנל{% else %}Signal{% endif %}</th><th>{% if lang == 'he' %}תנאי{% else %}Condition{% endif %}</th></tr>
+        <tr><td>💧 Dry Powder</td><td>{% if lang == 'he' %}מעל 50% סטייבלקוין → מוכן להשקיע{% else %}Over 50% stablecoins → ready to invest{% endif %}</td></tr>
+        <tr><td>🔒 Long-Term Commitment</td><td>{% if lang == 'he' %}מעל 20% staked → מחויבות לטווח ארוך{% else %}Over 20% staked → long-term commitment{% endif %}</td></tr>
+        <tr><td>🗳️ Governance Participant</td><td>{% if lang == 'he' %}מחזיק טוקני גוברננס{% else %}Holds governance tokens{% endif %}</td></tr>
+        <tr><td>📊 Diversified Portfolio</td><td>{% if lang == 'he' %}5+ טוקנים שונים{% else %}5+ different tokens{% endif %}</td></tr>
+        <tr><td>🎯 Concentrated Position</td><td>{% if lang == 'he' %}מעל 70% בנכס יחיד{% else %}Over 70% in single asset{% endif %}</td></tr>
+        <tr><td>🔥 Active Trader</td><td>{% if lang == 'he' %}200+ עסקאות{% else %}200+ transactions{% endif %}</td></tr>
+    </table>
+
+    <h3>Investment Readiness:</h3>
+    <table>
+        <tr><th>{% if lang == 'he' %}רמה{% else %}Level{% endif %}</th><th>{% if lang == 'he' %}תיאור{% else %}Description{% endif %}</th></tr>
+        <tr><td><span class="badge badge-green">High</span></td><td>{% if lang == 'he' %}3+ סיגנלים חזקים{% else %}3+ strong signals{% endif %}</td></tr>
+        <tr><td><span class="badge badge-yellow">Medium</span></td><td>{% if lang == 'he' %}1-2 סיגנלים{% else %}1-2 signals{% endif %}</td></tr>
+        <tr><td><span class="badge">Low</span></td><td>{% if lang == 'he' %}אין סיגנלים משמעותיים{% else %}No significant signals{% endif %}</td></tr>
+    </table>
+</div>
+
+<!-- Section 9: CSV Columns -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}9. הסבר עמודות CSV{% else %}9. CSV Column Reference{% endif %}</h2>
+
+    <div class="card card-blue">
+        <h4>{% if lang == 'he' %}קלטים:{% else %}Inputs:{% endif %}</h4>
+        <ul>
+            <li><code>address</code> — {% if lang == 'he' %}כתובת הארנק{% else %}Wallet address{% endif %}</li>
+            <li><code>chain</code> — {% if lang == 'he' %}שם הרשת (ethereum, polygon, base, arbitrum, solana){% else %}Network (ethereum, polygon, base, arbitrum, solana){% endif %}</li>
+        </ul>
+    </div>
+
+    <h4>{% if lang == 'he' %}סיווגים בסיסיים:{% else %}Basic Classifications:{% endif %}</h4>
+    <ul>
+        <li><code>tier</code> — Whale / Tuna / Fish / Infra</li>
+        <li><code>wallet_type</code> — USER / CEX_EXCHANGE / DEX_ROUTER / BRIDGE / PROTOCOL / CONTRACT / UNKNOWN</li>
+        <li><code>persona</code> — {% if lang == 'he' %}שם הפרסונה{% else %}Persona name{% endif %}</li>
+    </ul>
+
+    <h4>{% if lang == 'he' %}מידע כלכלי:{% else %}Financial Info:{% endif %}</h4>
+    <ul>
+        <li><code>native_balance</code> — {% if lang == 'he' %}יתרת הטוקן המקורי{% else %}Native token balance{% endif %}</li>
+        <li><code>est_net_worth_usd</code> — {% if lang == 'he' %}שווי נטו משוער בדולרים{% else %}Estimated net worth in USD{% endif %}</li>
+        <li><code>stable_usd_total</code> — {% if lang == 'he' %}סך סטייבלקוין בדולרים{% else %}Total stablecoins in USD{% endif %}</li>
+    </ul>
+
+    <h4>{% if lang == 'he' %}ציונים (0-100):{% else %}Scores (0-100):{% endif %}</h4>
+    <ul>
+        <li><code>investor_score</code>, <code>balance_score</code>, <code>activity_score</code></li>
+        <li><code>defi_investor_score</code>, <code>reputation_score</code>, <code>sybil_risk_score</code></li>
+    </ul>
+
+    <h4>{% if lang == 'he' %}אינטליגנציה מתקדמת (JSON):{% else %}Advanced Intelligence (JSON):{% endif %}</h4>
+    <ul>
+        <li><code>token_intelligence</code> — {% if lang == 'he' %}פילוח קטגוריות טוקנים{% else %}Token category breakdown{% endif %}</li>
+        <li><code>persona_detail</code> — {% if lang == 'he' %}פרטי פרסונה{% else %}Persona details{% endif %}</li>
+        <li><code>intent_signals</code> — {% if lang == 'he' %}סיגנלי כוונות{% else %}Intent signals{% endif %}</li>
+    </ul>
+
+    <h4>{% if lang == 'he' %}סנקציות וסיכונים:{% else %}Sanctions & Risks:{% endif %}</h4>
+    <ul>
+        <li><code>sanctions_hit</code> — true/false</li>
+        <li><code>sanctions_list_name</code> — OFAC / EU / Israel</li>
+        <li><code>sanctions_entity_name</code> — {% if lang == 'he' %}שם הישות{% else %}Entity name{% endif %}</li>
+        <li><code>risk_flags_str</code> — {% if lang == 'he' %}דגלי סיכון{% else %}Risk flags{% endif %}</li>
+    </ul>
+</div>
+
+<!-- Section 10: Sanctions -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}10. בדיקות סנקציות{% else %}10. Sanctions Screening{% endif %}</h2>
+    <p>{% if lang == 'he' %}המערכת בודקת כל ארנק מול 3 מקורות סנקציות:{% else %}The system checks every wallet against 3 sanctions sources:{% endif %}</p>
+
+    <div class="grid-2">
+        <div class="card card-blue">
+            <h4>🇺🇸 OFAC SDN</h4>
+            <p>{% if lang == 'he' %}משרד האוצר האמריקאי{% else %}US Treasury Department{% endif %}</p>
+        </div>
+        <div class="card card-yellow">
+            <h4>🇪🇺 EU Consolidated</h4>
+            <p>{% if lang == 'he' %}האיחוד האירופי{% else %}European Union{% endif %}</p>
+        </div>
+        <div class="card card-purple">
+            <h4>🇮🇱 Israel NBCTF</h4>
+            <p>{% if lang == 'he' %}הרשות להלבנת הון{% else %}Anti-Money Laundering Authority{% endif %}</p>
+        </div>
+    </div>
+
+    <ul>
+        <li>{% if lang == 'he' %}עדכון אוטומטי כל 24 שעות{% else %}Automatic update every 24 hours{% endif %}</li>
+        <li>{% if lang == 'he' %}מהירות בדיקה: ~1ms לארנק{% else %}Check speed: ~1ms per wallet{% endif %}</li>
+        <li>{% if lang == 'he' %}בהתאמה: sanctions_hit=true, דגל SANCTIONS_HIT{% else %}On match: sanctions_hit=true, SANCTIONS_HIT flag{% endif %}</li>
+    </ul>
+</div>
+
+<!-- Section 11: Risk Flags -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}11. דגלי סיכון{% else %}11. Risk Flags{% endif %}</h2>
+
+    <h3>{% if lang == 'he' %}דגלים ברמת ארנק:{% else %}Wallet-Level Flags:{% endif %}</h3>
+    <table>
+        <tr><th>{% if lang == 'he' %}דגל{% else %}Flag{% endif %}</th><th>{% if lang == 'he' %}תיאור{% else %}Description{% endif %}</th></tr>
+        <tr><td><span class="badge badge-red">SANCTIONS_HIT</span></td><td>{% if lang == 'he' %}הארנק מופיע ברשימת סנקציות{% else %}Wallet appears on sanctions list{% endif %}</td></tr>
+        <tr><td><span class="badge badge-yellow">SYBIL_RISK</span></td><td>{% if lang == 'he' %}חשד ל-Sybil (ציון ≥ 60){% else %}Suspected Sybil (score ≥ 60){% endif %}</td></tr>
+        <tr><td><span class="badge badge-yellow">LOW_VALUE_HIGH_ACTIVITY</span></td><td>{% if lang == 'he' %}שווי נמוך + פעילות גבוהה{% else %}Low value + high activity{% endif %}</td></tr>
+        <tr><td><span class="badge badge-blue">INFRASTRUCTURE_WALLET</span></td><td>{% if lang == 'he' %}ארנק תשתית{% else %}Infrastructure wallet{% endif %}</td></tr>
+        <tr><td><span class="badge">UNVERIFIED_CONTRACT</span></td><td>{% if lang == 'he' %}חוזה חכם לא מאומת{% else %}Unverified smart contract{% endif %}</td></tr>
+    </table>
+
+    <h3>{% if lang == 'he' %}דגלים ברמת הקהילה:{% else %}Community-Level Flags:{% endif %}</h3>
+    <table>
+        <tr><th>{% if lang == 'he' %}דגל{% else %}Flag{% endif %}</th><th>{% if lang == 'he' %}תיאור{% else %}Description{% endif %}</th></tr>
+        <tr><td>exchange_heavy</td><td>{% if lang == 'he' %}יותר מ-30% מהערך בארנקי בורסות{% else %}Over 30% of value in exchange wallets{% endif %}</td></tr>
+        <tr><td>sybil_cohort</td><td>{% if lang == 'he' %}יותר מ-20% עם דפוס Sybil{% else %}Over 20% with Sybil pattern{% endif %}</td></tr>
+        <tr><td>whale_concentration</td><td>{% if lang == 'he' %}Top 5 מחזיקים מעל 50% מהערך{% else %}Top 5 holders over 50% of value{% endif %}</td></tr>
+        <tr><td>low_user_ratio</td><td>{% if lang == 'he' %}פחות מ-50% משתמשים אמיתיים{% else %}Less than 50% real users{% endif %}</td></tr>
+        <tr><td>low_activity</td><td>{% if lang == 'he' %}ממוצע פעילות נמוך{% else %}Low average activity{% endif %}</td></tr>
+        <tr><td>sanctions_presence</td><td>{% if lang == 'he' %}קיימים ארנקים מוסנקצים{% else %}Sanctioned wallets present{% endif %}</td></tr>
+        <tr><td>healthy ✅</td><td>{% if lang == 'he' %}אין דגלי סיכון משמעותיים{% else %}No significant risk flags{% endif %}</td></tr>
+    </table>
+</div>
+
+<!-- Section 12: Identity Enrichment -->
+<div class="section major-section">
+    <h2>{% if lang == 'he' %}12. העשרת זהות ארנקים{% else %}12. Wallet Identity Enrichment{% endif %}</h2>
+    <p>{% if lang == 'he' %}עבור ארנקי USER על Ethereum עם יתרה ≥ $50 או 5+ עסקאות, המערכת מבצעת העשרת מידע אוטומטית:{% else %}For USER wallets on Ethereum with balance ≥ $50 or 5+ transactions, the system performs automatic enrichment:{% endif %}</p>
+
+    <div class="grid-2">
+        <div class="card card-blue">
+            <h4>ENS {% if lang == 'he' %}שם{% else %}Name{% endif %}</h4>
+            <p>{% if lang == 'he' %}בדיקת רישום ENS הפוך — אם לארנק יש שם כמו <code>vitalik.eth</code>. מצביע על זהות מוכרת ומחויבות ארוכת טווח ב-Ethereum.{% else %}Reverse ENS lookup — if the wallet has a registered name like <code>vitalik.eth</code>. Indicates established identity and long-term Ethereum commitment.{% endif %}</p>
+        </div>
+        <div class="card card-green">
+            <h4>{% if lang == 'he' %}גיל הארנק ומקור מימון{% else %}Wallet Age & Funding Source{% endif %}</h4>
+            <p>{% if lang == 'he' %}מחפש את העסקה הנכנסת הראשונה כדי לקבוע מתי נפתח הארנק ומאיפה הגיע המימון הראשוני. דורש Alchemy RPC.{% else %}Finds the first inbound transaction to determine when the wallet was created and its original funding source. Requires Alchemy RPC.{% endif %}</p>
+        </div>
+        <div class="card card-purple">
+            <h4>NFT {% if lang == 'he' %}אחזקות{% else %}Holdings{% endif %}</h4>
+            <p>{% if lang == 'he' %}ספירת NFTs וזיהוי קולקציות Blue-Chip (BAYC, CryptoPunks, MAYC, Doodles וכו'). מחזיקי Blue-Chip הם בד"כ אנשים בעלי שווי גבוה עם מחויבות ל-Web3.{% else %}NFT count and Blue-Chip collection detection (BAYC, CryptoPunks, MAYC, Doodles, etc.). Blue-Chip holders are typically high-net-worth individuals with long-term Web3 commitment.{% endif %}</p>
+        </div>
+        <div class="card card-yellow">
+            <h4>{% if lang == 'he' %}מגבלות{% else %}Limitations{% endif %}</h4>
+            <p>{% if lang == 'he' %}העשרה פועלת רק על Ethereum. ארנקי Solana, Polygon, Base וכו' אינם נתמכים. כל הפיצ'רים דורשים Alchemy RPC — עם ספק RPC רגיל הם ידולגו בשקט.{% else %}Enrichment only works on Ethereum. Solana, Polygon, Base, etc. are not supported. All features require Alchemy RPC — with a standard RPC provider they will be silently skipped.{% endif %}</p>
+        </div>
+    </div>
+
+    <h3>{% if lang == 'he' %}ארנקים שנכשלו בסריקה{% else %}Failed Wallet Scans{% endif %}</h3>
+    <p>{% if lang == 'he' %}אם ארנק נכשל בגלל שגיאת חיבור (RPC לא זמין, rate limit), המערכת מנסה שוב פעמיים ולאחר מכן שומרת רשומת כישלון. ארנקים שנכשלו:{% else %}If a wallet fails due to a connection error (RPC unavailable, rate limit), the system retries twice and then saves a failure record. Failed wallets:{% endif %}</p>
+    <ul>
+        <li>{% if lang == 'he' %}אינם נכללים בסטטיסטיקות ובניתוח{% else %}Are excluded from all statistics and analysis{% endif %}</li>
+        <li>{% if lang == 'he' %}מופיעים בטבלה נפרדת בנספח הדוח עם הסיבה{% else %}Appear in a separate table in the report appendix with the reason{% endif %}</li>
+        <li>{% if lang == 'he' %}ניתן להריץ מחדש את הניתוח כדי לנסות לשחזר אותם{% else %}Can be recovered by re-running the analysis{% endif %}</li>
+    </ul>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+    <p class="text-muted">Wallet Intelligence System © 2026 | {{ current_date }}</p>
+</div>
+
+</body>
+</html>

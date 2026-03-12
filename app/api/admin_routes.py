@@ -3,6 +3,8 @@ Admin API routes for settings management and sanctions list operations.
 Protected by X-API-Key header authentication.
 """
 
+import hmac
+
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -19,7 +21,7 @@ admin_router = APIRouter(prefix="/admin", tags=["Admin"])
 def require_api_key(x_api_key: str = Header(..., alias="X-API-Key")):
     if not settings.ADMIN_API_KEY:
         raise HTTPException(status_code=500, detail="ADMIN_API_KEY not configured on server")
-    if x_api_key != settings.ADMIN_API_KEY:
+    if not hmac.compare_digest(x_api_key, settings.ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 

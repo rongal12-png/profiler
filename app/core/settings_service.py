@@ -1,28 +1,35 @@
 """
-Settings service with DB persistence, versioning, audit logging, and in-memory cache.
+Settings service with DB persistence, versioning, audit logging, and Redis-backed cache.
 
 Supports two scopes:
   - 'global': applies to all projects (scope_key=None)
   - 'project': per-project overrides (scope_key=project_name)
 
 Effective settings = DEFAULT_SETTINGS <- active global <- active project
+
+H4: Cache is stored in Redis so all processes (API, workers) share the same cache
+and invalidation is immediate across processes.
 """
 
 import copy
-import time
+import json
 import logging
+import redis
 from sqlalchemy.orm import Session
 
-from .config import SessionLocal
+from .config import SessionLocal, settings as app_settings
 from .models import SettingsVersion, SettingsAuditLog
 from .default_settings import DEFAULT_SETTINGS
 
 logger = logging.getLogger(__name__)
 
-# In-memory cache
-_cache: dict[str, dict] = {}
-_cache_timestamps: dict[str, float] = {}
+# H4: Redis-backed cache shared across all processes
 _CACHE_TTL_SECONDS = 60
+_CACHE_PREFIX = "settings_cache:"
+
+def _get_redis() -> redis.Redis:
+    """Get Redis client for settings cache, reusing the Celery broker connection."""
+    return redis.from_url(app_settings.CELERY_BROKER_URL, decode_responses=True)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -43,13 +50,19 @@ def get_effective_settings(project_name: str | None = None, db: Session | None =
     2. Active global settings from DB (if any)
     3. Active project settings from DB (if project_name provided)
 
-    Uses in-memory cache with 60s TTL.
+    Uses Redis cache with 60s TTL (shared across API + workers).
     """
-    cache_key = f"settings:{project_name or '__global__'}"
-    now = time.time()
+    cache_key = f"{_CACHE_PREFIX}{project_name or '__global__'}"
 
-    if cache_key in _cache and (now - _cache_timestamps.get(cache_key, 0)) < _CACHE_TTL_SECONDS:
-        return _cache[cache_key]
+    # Try Redis cache first
+    try:
+        r = _get_redis()
+        cached = r.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        # Redis unavailable — fall through to DB
+        pass
 
     close_db = False
     if db is None:
@@ -82,8 +95,13 @@ def get_effective_settings(project_name: str | None = None, db: Session | None =
             if project_version and project_version.settings_json:
                 result = _deep_merge(result, project_version.settings_json)
 
-        _cache[cache_key] = result
-        _cache_timestamps[cache_key] = now
+        # Store in Redis cache
+        try:
+            r = _get_redis()
+            r.setex(cache_key, _CACHE_TTL_SECONDS, json.dumps(result))
+        except Exception:
+            pass  # Redis unavailable — settings still work, just uncached
+
         return result
 
     finally:
@@ -103,6 +121,16 @@ def create_settings_version(
     Creates a new settings version, deactivates the previous active version,
     and writes an audit log entry.
     """
+    # M2: Validate scoring weights sum if provided
+    if "scoring" in settings_json and "weights" in settings_json["scoring"]:
+        weights = settings_json["scoring"]["weights"]
+        # Weights should sum to ~1.0 (allowing sybil negative weight)
+        positive_sum = sum(v for v in weights.values() if v > 0)
+        if not (0.8 <= positive_sum <= 1.2):
+            raise ValueError(
+                f"Scoring weights positive values should sum to approximately 1.0, got {positive_sum:.2f}"
+            )
+
     # Find current active version for this scope
     current_active = (
         db.query(SettingsVersion)
@@ -230,6 +258,11 @@ def activate_settings_version(
 
 
 def _invalidate_cache():
-    """Clears the in-memory settings cache."""
-    _cache.clear()
-    _cache_timestamps.clear()
+    """Clears the Redis settings cache across all processes."""
+    try:
+        r = _get_redis()
+        keys = r.keys(f"{_CACHE_PREFIX}*")
+        if keys:
+            r.delete(*keys)
+    except Exception:
+        pass  # Redis unavailable — cache will expire naturally via TTL

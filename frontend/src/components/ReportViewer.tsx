@@ -31,8 +31,13 @@ export default function ReportViewer({ jobId }: Props) {
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/jobs/${jobId}/report?format=json`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch report");
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          let detail = "";
+          try { detail = JSON.parse(body)?.detail || body; } catch { detail = body; }
+          throw new Error(`Report error (HTTP ${res.status}): ${detail || "unknown error"}`);
+        }
         return res.json();
       })
       .then((data: ProjectReport) => {

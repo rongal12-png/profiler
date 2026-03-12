@@ -8,8 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
+    # ports: NOT exposed publicly — internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     healthcheck:
@@ -21,8 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: wallet-intel-redis
-    ports:
-      - "6379:6379"
+    # ports: NOT exposed publicly — internal only
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,7 +30,7 @@ services:
   api:
     build: .
     container_name: wallet-intel-api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes:
       - .:/app
     ports:
@@ -60,8 +58,9 @@ services:
 
   worker:
     build: .
-    container_name: wallet-intel-worker
-    command: celery -A app.worker.celery_app worker --loglevel=info -c 2
+    # No container_name — allows horizontal scaling: docker-compose up --scale worker=3
+    # H7: Gevent pool — 200 concurrent greenlets per container, all I/O non-blocking.
+    command: celery -A app.worker.celery_app worker --loglevel=info -P gevent -c 200
     volumes:
       - .:/app
     environment:
@@ -81,11 +80,25 @@ services:
       - ADMIN_API_KEY=${ADMIN_API_KEY}
     depends_on:
       - api
+    # L1: Healthcheck for worker
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping --timeout 10 2>/dev/null | grep -q 'ok' || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    # L10: Memory/CPU limits for worker (gevent is lightweight — 200 greenlets fit in 3G)
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '4.0'
 
   beat:
     build: .
     container_name: wallet-intel-beat
-    command: celery -A app.worker.celery_app beat --loglevel=info
+    # M6: Store beat schedule in a named volume (not local file / not committed to git)
+    command: celery -A app.worker.celery_app beat --loglevel=info --schedule=/data/celerybeat-schedule
     volumes:
       - .:/app
     environment:
@@ -96,6 +109,15 @@ services:
     depends_on:
       - redis
       - api
+    tmpfs:
+      - /data
+    # L1: Healthcheck for beat
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat-alive || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   frontend:
     build: ./frontend
@@ -104,6 +126,8 @@ services:
       - "3000:3000"
     environment:
       - API_BASE_URL=http://api:8000
+      - SITE_PASSWORD=${SITE_PASSWORD:-wallet123}
+      - NODE_ENV=development
     depends_on:
       - api
 

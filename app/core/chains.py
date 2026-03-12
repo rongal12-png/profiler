@@ -118,6 +118,80 @@ CHAIN_CONFIG = {
             "AAVE": "0xD6DF932A45C0f255f85145f286eA0b292B21C90B",
         },
     },
+    "optimism": {
+        "id": 10,
+        "rpc_url": settings.OPTIMISM_RPC_URL,
+        "native_symbol": "ETH",
+        "coingecko_id": "ethereum",
+        "stables": {
+            "USDC": "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
+            "USDT": "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+            "DAI":  "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1",
+        },
+        "top_tokens": {
+            "WETH": "0x4200000000000000000000000000000000000006",
+            "OP":   "0x4200000000000000000000000000000000000042",
+        },
+        "staked_tokens": {
+            "wstETH": "0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb",
+        },
+        "governance_tokens": {
+            "OP": "0x4200000000000000000000000000000000000042",
+        },
+    },
+    "bsc": {
+        "id": 56,
+        "rpc_url": settings.BSC_RPC_URL,
+        "native_symbol": "BNB",
+        "coingecko_id": "binancecoin",
+        "stables": {
+            "BUSD": "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+            "USDT": "0x55d398326f99059fF775485246999027B3197955",
+            "USDC": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+        },
+        "top_tokens": {
+            "WBNB": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+            "CAKE": "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+        },
+        "staked_tokens": {},
+        "governance_tokens": {
+            "CAKE": "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+        },
+    },
+    "avalanche": {
+        "id": 43114,
+        "rpc_url": settings.AVALANCHE_RPC_URL,
+        "native_symbol": "AVAX",
+        "coingecko_id": "avalanche-2",
+        "stables": {
+            "USDC":   "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+            "USDC.e": "0xA7D7079b0FEaD91F3e65f86E8915Cb59c1a4C664",
+            "USDT.e": "0xc7198437980c041c805A1EDcbA50c1Ce5db95118",
+        },
+        "top_tokens": {
+            "WAVAX": "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7",
+            "JOE":   "0x6e84a6216eA6dACC71eE8E6b0a5B7322EEbC0fDd",
+        },
+        "staked_tokens": {
+            "sAVAX": "0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE",
+        },
+        "governance_tokens": {},
+    },
+    "fantom": {
+        "id": 250,
+        "rpc_url": settings.FANTOM_RPC_URL,
+        "native_symbol": "FTM",
+        "coingecko_id": "fantom",
+        "stables": {
+            "USDC":  "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
+            "fUSDT": "0x049d68029688eAbF473097a2fC38ef61633A3C7A",
+        },
+        "top_tokens": {
+            "WFTM": "0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83",
+        },
+        "staked_tokens": {},
+        "governance_tokens": {},
+    },
     "solana": {
         "id": "solana",
         "rpc_url": settings.SOLANA_RPC_URL,

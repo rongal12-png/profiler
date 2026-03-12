@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       // Set authentication cookie (expires in 7 days)
       response.cookies.set("authenticated", "true", {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: false,
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: "/",

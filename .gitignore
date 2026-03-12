@@ -71,6 +71,10 @@ venv.bak
 # Output
 output/
 
+# Celery Beat schedule (binary, auto-generated)
+celerybeat-schedule
+celerybeat-schedule.db
+
 # Temporary files
 *sdn_sample.xml
 *eu_sample.xml

@@ -17,14 +17,19 @@ export async function GET(
     const contentType =
       response.headers.get("content-type") || "application/json";
 
-    // Handle binary PDF response
-    if (format === "pdf") {
+    // Handle binary responses (PDF, DOCX)
+    if (format === "pdf" || format === "docx") {
       const buffer = await response.arrayBuffer();
+      const ext = format === "pdf" ? "pdf" : "docx";
+      const mime =
+        format === "pdf"
+          ? "application/pdf"
+          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
       return new NextResponse(buffer, {
         status: response.status,
         headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="wallet-report-${jobId}.pdf"`,
+          "Content-Type": mime,
+          "Content-Disposition": `attachment; filename="wallet-report-${jobId}.${ext}"`,
         },
       });
     }
