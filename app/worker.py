@@ -29,9 +29,9 @@ celery_app.conf.update(
     # Prefetch 1 task per greenlet — prevents the worker from pulling all 100K tasks
     # into memory at once, which causes task loss on restart
     worker_prefetch_multiplier=1,
-    # L5: Task rate limiting (500/m per worker)
+    # L5: Task rate limiting (1000/m per worker)
     task_annotations={
-        'tasks.analyze_wallet': {'rate_limit': '500/m'},
+        'tasks.analyze_wallet': {'rate_limit': '1000/m'},
     },
 )
 
@@ -168,8 +168,9 @@ def reap_stale_jobs():
                     job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
                 logger.info(f"Reaper: completed job {job.id} ({processed}/{job.total_wallets} wallets)")
             else:
-                # Allow more time based on job size: 1s per wallet, min 30min, max 24h
-                allowed_minutes = max(30, min(1440, job.total_wallets // 60))
+                # Allow more time based on job size: ~4s per wallet, min 60min, max 5 days
+                # 500K wallets observed at ~277/min (30h) — give generous 2× buffer
+                allowed_minutes = max(60, min(7200, job.total_wallets // 15))
                 timeout_cutoff = now - timedelta(minutes=allowed_minutes)
                 if job.started_at and job.started_at.replace(tzinfo=timezone.utc) < timeout_cutoff:
                     job.status = 'FAILED'
