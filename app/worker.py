@@ -122,19 +122,25 @@ def analyze_wallet(job_id: int, address: str, chain: str):
 
 @celery_app.task(name='tasks.update_sanctions')
 def update_sanctions_task():
-    """Periodic task to refresh all enabled sanctions lists."""
+    """Periodic task to refresh all enabled sanctions lists.
+    Delegates to the API endpoint via local HTTP to avoid gevent SSL issues
+    with large file downloads (OFAC XML is ~100MB).
+    """
     logger.info("Starting periodic sanctions list update")
-    db = SessionLocal()
+    import requests as _req
     try:
-        effective_settings = settings_service.get_effective_settings(db=db)
-        results = sanctions_service.update_all_lists(db=db, settings=effective_settings)
-        logger.info(f"Sanctions update results: {results}")
-        return results
+        resp = _req.post(
+            "http://api:8000/admin/sanctions/update",
+            headers={"X-API-Key": settings.ADMIN_API_KEY},
+            timeout=900,  # allow up to 15 min for OFAC XML download + parse
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        logger.info(f"Sanctions update completed: {result}")
+        return result
     except Exception as e:
         logger.error(f"Failed to update sanctions lists: {e}", exc_info=True)
         raise
-    finally:
-        db.close()
 
 
 @celery_app.task(name='tasks.reap_stale_jobs')
