@@ -2,10 +2,13 @@ from .core.config import settings, SessionLocal
 from .core.analysis import run_wallet_analysis
 from .core.models import AnalysisJob, WalletAnalysis
 from .core import settings_service, sanctions_service
+from .core.chains import CHAIN_CONFIG
 from celery import Celery
 from celery.schedules import crontab
 import logging
+import json
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import func
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,8 +67,28 @@ def process_wallet_list(job_id: int, wallets: list[dict]):
     finally:
         db.close()
 
-    logger.info(f"Dispatching {len(wallets)} wallet tasks for job {job_id}")
-    for wallet_info in wallets:
+    # Save unsupported-chain wallets directly without dispatching
+    configured_chains = {chain for chain, cfg in CHAIN_CONFIG.items() if cfg.get('rpc_url')}
+    unsupported = [w for w in wallets if w['chain'] not in configured_chains]
+    supported = [w for w in wallets if w['chain'] in configured_chains]
+
+    if unsupported:
+        db2 = SessionLocal()
+        try:
+            for w in unsupported:
+                db2.add(WalletAnalysis(
+                    job_id=job_id, address=w['address'], chain=w['chain'],
+                    tier='UNKNOWN', notes=f"Chain {w['chain']} not configured"
+                ))
+            db2.commit()
+        except Exception as e:
+            logger.error(f"Failed to save unsupported-chain records: {e}")
+            db2.rollback()
+        finally:
+            db2.close()
+
+    logger.info(f"Dispatching {len(supported)} wallet tasks for job {job_id} ({len(unsupported)} unsupported skipped)")
+    for wallet_info in supported:
         analyze_wallet.delay(job_id, wallet_info['address'], wallet_info['chain'])
 
 @celery_app.task(
@@ -201,6 +224,28 @@ def reap_stale_jobs():
                     if job.started_at:
                         job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
                     logger.warning(f"Reaper: failed job {job.id} ({processed}/{job.total_wallets} wallets, timeout={allowed_minutes}m)")
+                else:
+                    # Check if job is stalled: no new wallets in last 5 minutes
+                    last_wallet_time = db.query(func.max(WalletAnalysis.last_scored_at)).filter(
+                        WalletAnalysis.job_id == job.id
+                    ).scalar()
+                    stall_cutoff = now - timedelta(minutes=5)
+                    is_stalled = (
+                        last_wallet_time is None or
+                        last_wallet_time.replace(tzinfo=timezone.utc) < stall_cutoff
+                    )
+                    if is_stalled and job.pending_wallets:
+                        all_wallets = json.loads(job.pending_wallets)
+                        completed_set = {
+                            (w.address.lower(), w.chain)
+                            for w in db.query(WalletAnalysis).filter(WalletAnalysis.job_id == job.id)
+                        }
+                        remaining = [w for w in all_wallets if (w['address'].lower(), w['chain']) not in completed_set]
+                        if remaining:
+                            chunk_size = 10_000
+                            for i in range(0, len(remaining), chunk_size):
+                                process_wallet_list.delay(job.id, remaining[i:i + chunk_size])
+                            logger.info(f"Reaper: re-dispatched {len(remaining)} stalled wallets for job {job.id}")
 
         if stale_jobs:
             db.commit()
