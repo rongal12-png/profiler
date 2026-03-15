@@ -88,8 +88,8 @@ def analyze_wallet(job_id: int, address: str, chain: str):
     db = SessionLocal()
     try:
         job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-        if job and job.status == 'STOPPED':
-            logger.info(f"Job {job_id} is STOPPED, skipping analysis for {address}")
+        if job and job.status in ('STOPPED', 'PAUSED'):
+            logger.info(f"Job {job_id} is {job.status}, skipping analysis for {address}")
             return
         project_name = job.project_name if job else None
         effective_settings = settings_service.get_effective_settings(project_name=project_name, db=db)
@@ -108,10 +108,10 @@ def analyze_wallet(job_id: int, address: str, chain: str):
     # Phase 3: quick DB write — save result or failure record
     db = SessionLocal()
     try:
-        # Re-check status: job may have been stopped while Phase 2 was running
+        # Re-check status: job may have been stopped/paused while Phase 2 was running
         job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-        if job and job.status == 'STOPPED':
-            logger.info(f"Job {job_id} is STOPPED, discarding result for {address}")
+        if job and job.status in ('STOPPED', 'PAUSED'):
+            logger.info(f"Job {job_id} is {job.status}, discarding result for {address}")
             return
 
         if analysis_data is not None:
