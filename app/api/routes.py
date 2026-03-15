@@ -146,6 +146,7 @@ def submit_job(
             project_name=project_name.strip() or "Project",
             status='IN_PROGRESS',
             started_at=datetime.now(timezone.utc),
+            pending_wallets=json.dumps(wallets),
         )
         db.add(new_job)
         db.commit()
@@ -210,6 +211,79 @@ def get_job_status(job_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/jobs/{job_id}/pause", tags=["Jobs"])
+def pause_job(job_id: int, db: Session = Depends(get_db)):
+    """Pause a running job. In-flight wallet tasks complete naturally; no new tasks are dispatched."""
+    job = db.query(models.AnalysisJob).filter(models.AnalysisJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != 'IN_PROGRESS':
+        raise HTTPException(status_code=400, detail=f"Cannot pause job with status: {job.status}")
+    job.status = 'PAUSED'
+    job.paused_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"job_id": job_id, "status": "PAUSED"}
+
+
+@router.post("/jobs/{job_id}/resume", tags=["Jobs"])
+def resume_job(job_id: int, db: Session = Depends(get_db)):
+    """Resume a paused job by re-dispatching only the wallets not yet processed."""
+    job = db.query(models.AnalysisJob).filter(models.AnalysisJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != 'PAUSED':
+        raise HTTPException(status_code=400, detail=f"Cannot resume job with status: {job.status}")
+    if not job.pending_wallets:
+        raise HTTPException(status_code=400, detail="No wallet list stored for this job (submitted before pause/resume support was added)")
+
+    all_wallets = json.loads(job.pending_wallets)
+
+    # Determine which wallets are already done
+    done = set(
+        (wa.address, wa.chain)
+        for wa in db.query(models.WalletAnalysis.address, models.WalletAnalysis.chain)
+        .filter(models.WalletAnalysis.job_id == job_id)
+        .all()
+    )
+    remaining = [w for w in all_wallets if (w['address'], w['chain']) not in done]
+
+    if not remaining:
+        job.status = 'COMPLETED'
+        job.completed_at = datetime.now(timezone.utc)
+        if job.started_at:
+            job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
+        db.commit()
+        return {"job_id": job_id, "status": "COMPLETED", "message": "All wallets already processed"}
+
+    job.status = 'IN_PROGRESS'
+    db.commit()
+
+    chunk_size = 10_000
+    for i in range(0, len(remaining), chunk_size):
+        process_wallet_list.delay(job_id, remaining[i:i + chunk_size])
+
+    return {"job_id": job_id, "status": "IN_PROGRESS", "remaining_wallets": len(remaining)}
+
+
+@router.post("/jobs/{job_id}/stop", tags=["Jobs"])
+def stop_job(job_id: int, db: Session = Depends(get_db)):
+    """Stop a job immediately. In-flight tasks will discard their results."""
+    job = db.query(models.AnalysisJob).filter(models.AnalysisJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in ('IN_PROGRESS', 'PAUSED'):
+        raise HTTPException(status_code=400, detail=f"Cannot stop job with status: {job.status}")
+    processed = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job_id).count()
+    job.status = 'STOPPED'
+    job.stopped_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(timezone.utc)
+    if job.started_at:
+        job.analysis_duration_seconds = (job.completed_at - job.started_at).total_seconds()
+    job.result = f"Stopped by user after {processed}/{job.total_wallets} wallets processed"
+    db.commit()
+    return {"job_id": job_id, "status": "STOPPED"}
+
+
 @router.get("/jobs/{job_id}/report", tags=["Reports"])
 def get_job_report(
     job_id: int,
@@ -220,7 +294,7 @@ def get_job_report(
     job = db.query(models.AnalysisJob).filter(models.AnalysisJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != 'COMPLETED':
+    if job.status not in ('COMPLETED', 'STOPPED'):
         raise HTTPException(status_code=400, detail=f"Job is not complete. Current status: {job.status}")
 
     results = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job_id).all()

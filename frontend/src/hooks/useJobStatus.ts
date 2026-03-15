@@ -8,6 +8,8 @@ const INITIAL_INTERVAL = 2000; // 2s
 const MAX_INTERVAL = 10000; // 10s
 const BACKOFF_FACTOR = 1.3;
 
+const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "PAUSED", "STOPPED"]);
+
 export function useJobStatus(jobId: string | null) {
   const [status, setStatus] = useState<JobStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,22 +26,17 @@ export function useJobStatus(jobId: string | null) {
       setStatus(data);
       setError(null);
 
-      if (data.status === "COMPLETED" || data.status === "FAILED") {
-        // Stop polling on terminal state
+      if (TERMINAL_STATES.has(data.status)) {
         return;
       }
 
-      // Schedule next poll with backoff
       intervalRef.current = Math.min(
         intervalRef.current * BACKOFF_FACTOR,
         MAX_INTERVAL
       );
       timeoutRef.current = setTimeout(fetchStatus, intervalRef.current);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch status"
-      );
-      // Still retry on error, but with backoff
+      setError(err instanceof Error ? err.message : "Failed to fetch status");
       intervalRef.current = Math.min(
         intervalRef.current * BACKOFF_FACTOR,
         MAX_INTERVAL
@@ -50,14 +47,12 @@ export function useJobStatus(jobId: string | null) {
 
   useEffect(() => {
     if (!jobId) return;
-
     intervalRef.current = INITIAL_INTERVAL;
     fetchStatus();
-
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [jobId, fetchStatus]);
 
-  return { status, error };
+  return { status, error, refetch: fetchStatus };
 }

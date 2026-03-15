@@ -10,7 +10,7 @@ import ReportViewer from "@/components/ReportViewer";
 export default function JobPage() {
   const params = useParams();
   const jobId = params.jobId as string;
-  const { status, error } = useJobStatus(jobId);
+  const { status, error, refetch } = useJobStatus(jobId);
 
   // Enrich localStorage with latest job data
   useEffect(() => {
@@ -40,27 +40,15 @@ export default function JobPage() {
         href="/"
         className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6"
       >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M15 19l-7-7 7-7"
-          />
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
         Back to Home
       </Link>
 
       <div className="flex items-baseline gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
-          {status?.project_name
-            ? `${status.project_name} — Job #${jobId}`
-            : `Job #${jobId}`}
+          {status?.project_name ? `${status.project_name} — Job #${jobId}` : `Job #${jobId}`}
         </h1>
         {status && (
           <span className="text-sm text-gray-500">
@@ -71,9 +59,7 @@ export default function JobPage() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <p className="text-red-700">
-            Error connecting to the analysis service: {error}
-          </p>
+          <p className="text-red-700">Error connecting to the analysis service: {error}</p>
         </div>
       )}
 
@@ -84,23 +70,30 @@ export default function JobPage() {
         </div>
       )}
 
-      {status &&
-        (status.status === "PENDING" || status.status === "IN_PROGRESS") && (
-          <ProgressTracker status={status} />
-        )}
+      {status && ["PENDING", "IN_PROGRESS", "PAUSED"].includes(status.status) && (
+        <ProgressTracker status={status} onAction={refetch} />
+      )}
 
       {status && status.status === "COMPLETED" && (
         <ReportViewer jobId={status.job_id} />
       )}
 
+      {status && status.status === "STOPPED" && (
+        <div className="space-y-4">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">Job Stopped</h2>
+            <p className="text-gray-600">{status.result || "Job was stopped by user."}</p>
+          </div>
+          {status.wallets_processed > 0 && (
+            <ReportViewer jobId={status.job_id} />
+          )}
+        </div>
+      )}
+
       {status && status.status === "FAILED" && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-red-800 mb-2">
-            Analysis Failed
-          </h2>
-          <p className="text-red-600">
-            {status.result || "An unknown error occurred during analysis."}
-          </p>
+          <h2 className="text-lg font-semibold text-red-800 mb-2">Analysis Failed</h2>
+          <p className="text-red-600">{status.result || "An unknown error occurred during analysis."}</p>
         </div>
       )}
     </div>

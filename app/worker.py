@@ -53,10 +53,17 @@ celery_app.conf.beat_schedule = {
 def process_wallet_list(job_id: int, wallets: list[dict]):
     """
     Celery task to dispatch analysis tasks for a chunk of wallets.
-    The API endpoint already sets the job to IN_PROGRESS before dispatching chunks,
-    so this task only needs to enqueue analyze_wallet tasks.
-    Each invocation handles up to 10K wallets (~500KB payload, dispatches in seconds).
+    Checks job status first — skips dispatch if job was paused or stopped.
     """
+    db = SessionLocal()
+    try:
+        job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+        if job and job.status in ('STOPPED', 'PAUSED'):
+            logger.info(f"Job {job_id} is {job.status}, skipping dispatch of {len(wallets)} wallets")
+            return
+    finally:
+        db.close()
+
     logger.info(f"Dispatching {len(wallets)} wallet tasks for job {job_id}")
     for wallet_info in wallets:
         analyze_wallet.delay(job_id, wallet_info['address'], wallet_info['chain'])
@@ -81,6 +88,9 @@ def analyze_wallet(job_id: int, address: str, chain: str):
     db = SessionLocal()
     try:
         job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+        if job and job.status == 'STOPPED':
+            logger.info(f"Job {job_id} is STOPPED, skipping analysis for {address}")
+            return
         project_name = job.project_name if job else None
         effective_settings = settings_service.get_effective_settings(project_name=project_name, db=db)
     finally:
@@ -98,6 +108,12 @@ def analyze_wallet(job_id: int, address: str, chain: str):
     # Phase 3: quick DB write — save result or failure record
     db = SessionLocal()
     try:
+        # Re-check status: job may have been stopped while Phase 2 was running
+        job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+        if job and job.status == 'STOPPED':
+            logger.info(f"Job {job_id} is STOPPED, discarding result for {address}")
+            return
+
         if analysis_data is not None:
             wallet_record = WalletAnalysis(job_id=job_id, **analysis_data)
             db.add(wallet_record)

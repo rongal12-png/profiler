@@ -143,7 +143,7 @@ export default function HomePage() {
                         color={
                           job.status === "COMPLETED" ? "green" :
                           job.status === "FAILED" ? "red" :
-                          job.status === "IN_PROGRESS" ? "blue" : "yellow"
+                          job.status === "IN_PROGRESS" ? "blue" : job.status === "PAUSED" ? "yellow" : job.status === "STOPPED" ? "gray" : "yellow"
                         }
                       />
                       <svg

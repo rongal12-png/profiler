@@ -11,6 +11,8 @@ Base = declarative_base()
 class JobStatus(str, enum.Enum):
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
+    PAUSED = "PAUSED"
+    STOPPED = "STOPPED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
@@ -26,6 +28,9 @@ class AnalysisJob(Base):
     total_wallets = Column(Integer)
     project_name = Column(String, nullable=True)
     result = Column(String, nullable=True)
+    pending_wallets = Column(Text, nullable=True)   # JSON list of {address, chain} for resume
+    paused_at = Column(DateTime(timezone=True), nullable=True)
+    stopped_at = Column(DateTime(timezone=True), nullable=True)
 
     wallets = relationship("WalletAnalysis", back_populates="job")
 
