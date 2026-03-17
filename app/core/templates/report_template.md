@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary — Company View
 
-This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** unique addresses{% if is_multi_chain %} ({{ scans_count }} cross-chain scans aggregated){% else %} across {{ chain_count }} chain{{ "s" if chain_count > 1 else "" }}{% endif %}. The total estimated value controlled by these wallets is **{{ total_usd_controlled }}**.
+This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** unique addresses across **{{ chains_scanned }}** chain{{ "s" if chains_scanned > 1 else "" }}{% if is_multi_chain %} ({{ scans_count }} cross-chain scans aggregated){% endif %}. The total estimated value controlled by these wallets is **{{ total_usd_controlled }}**.
 {% if is_multi_chain %}
 > **Multi-Chain Scan:** Each wallet's holdings were aggregated across all scanned networks. A wallet holding assets on both Ethereum and Base appears as a single entry with combined net worth. The "Chains with Holdings" column in the appendix tables shows which networks each wallet is active on.
 {% endif %}

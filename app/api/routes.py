@@ -306,13 +306,21 @@ def get_job_report(
     if job.status not in ('COMPLETED', 'STOPPED'):
         raise HTTPException(status_code=400, detail=f"Job is not complete. Current status: {job.status}")
 
-    from sqlalchemy import func as _func
+    from sqlalchemy import func as _func, distinct as _distinct
     import math as _math, logging as _logging
     _log = _logging.getLogger(__name__)
 
     total_count = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job_id).count()
     if total_count == 0:
         raise HTTPException(status_code=404, detail="No analysis results found for this job.")
+
+    # Unique addresses and chains — report should say "100k wallets across 5 chains", not "500k scans"
+    unique_addresses = db.query(_func.count(_distinct(models.WalletAnalysis.address))).filter(
+        models.WalletAnalysis.job_id == job_id
+    ).scalar() or total_count
+    chains_scanned = db.query(_func.count(_distinct(models.WalletAnalysis.chain))).filter(
+        models.WalletAnalysis.job_id == job_id
+    ).scalar() or 1
 
     project_name = job.project_name or "Project"
 
@@ -387,8 +395,10 @@ def get_job_report(
                 "project_name": project_name,
                 "job_id": job_id,
                 "reference_id": reporting.generate_reference_id(job_id),
-                "total_wallets": total_count,
-                "report_includes_top": min(total_count, REPORT_LIMIT),
+                "total_wallets": unique_addresses,
+                "total_chain_scans": total_count,
+                "chains_scanned": chains_scanned,
+                "report_includes_top": min(unique_addresses, REPORT_LIMIT),
                 "wallets": json.loads(df.to_json(orient='records')),
                 "exchanges": {
                     "cex": [
@@ -424,13 +434,13 @@ def get_job_report(
             _log.exception(f"JSON report generation failed for job {job_id}")
             raise HTTPException(status_code=500, detail=f"Report generation error: {type(e).__name__}: {e}")
     elif format == 'markdown':
-        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name, total_wallets_actual=total_count)
+        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name, total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
         return Response(content=md_content, media_type='text/markdown')
     elif format == 'html':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
         return Response(content=html_content, media_type='text/html')
     elif format == 'pdf':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
         pdf_bytes = reporting.generate_pdf(html_content)
         safe_name = project_name.replace('"', '').replace(' ', '_')
         return Response(
@@ -439,7 +449,7 @@ def get_job_report(
             headers={"Content-Disposition": f'attachment; filename="{safe_name}-report-{job_id}.pdf"'},
         )
     elif format == 'docx':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
         docx_bytes = reporting.generate_docx(html_content, project_name)
         safe_name = project_name.replace('"', '').replace(' ', '_')
         return Response(
