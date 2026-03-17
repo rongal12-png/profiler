@@ -173,6 +173,7 @@ def determine_tier(
     is_contract: bool,
     label_types: list[str],
     thresholds: dict | None = None,
+    wallet_type: str = "USER",
 ) -> str:
     """
     Whale: high investor_score OR VC/KOL labeled OR high defi+launchpad investing
@@ -186,6 +187,9 @@ def determine_tier(
     whale_threshold = float(t.get("whale", 55))
     tuna_threshold = float(t.get("tuna", 30))
 
+    # Non-USER wallet types are always Infra (CEX/DEX/Bridge/Protocol never count as Whale)
+    if wallet_type in ("CEX_EXCHANGE", "DEX_ROUTER", "BRIDGE", "PROTOCOL", "CONTRACT"):
+        return "Infra"
     # Infra wallets are always Infra
     if known_entity_type in ("exchange", "bridge", "protocol", "dex_router"):
         return "Infra"
@@ -355,6 +359,7 @@ def score_wallet(
     top_token_count: int = 0,
     scoring_settings: dict | None = None,
     token_intel: dict | None = None,
+    wallet_type: str = "USER",
 ) -> dict:
     """
     Main entry point: compute all scores, tier, and persona for a wallet.
@@ -377,7 +382,7 @@ def score_wallet(
     sybil = compute_sybil_risk_score(tx_count, est_net_worth_usd, is_contract, known_entity_type)
 
     investor = compute_investor_score(balance, activity, defi, reputation, sybil, weights=weights)
-    tier = determine_tier(investor, known_entity_type, is_contract, label_types, thresholds=thresholds)
+    tier = determine_tier(investor, known_entity_type, is_contract, label_types, thresholds=thresholds, wallet_type=wallet_type)
 
     # Extract token intelligence data for persona detection
     staked_share = 0.0

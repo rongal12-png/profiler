@@ -274,6 +274,10 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
     if effective_settings:
         scoring_settings = effective_settings.get("scoring")
 
+    # Cap est_net_worth_usd — prevents token decimal bugs from producing impossible values
+    MAX_SANE_WORTH = 1_000_000_000  # $1B per wallet
+    est_net_worth_usd = min(est_net_worth_usd, MAX_SANE_WORTH)
+
     score_result = scoring.score_wallet(
         est_net_worth_usd=est_net_worth_usd,
         stable_usd_total=total_stable_usd,
@@ -285,6 +289,7 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
         top_token_count=len(top_token_balances) + len(staked_token_balances) + len(governance_token_balances),
         scoring_settings=scoring_settings,
         token_intel=token_intel,
+        wallet_type=wallet_type,
     )
 
     # --- Investment Intent Signals ---

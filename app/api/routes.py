@@ -381,6 +381,18 @@ def get_job_report(
                 "total_wallets": total_count,
                 "report_includes_top": min(total_count, REPORT_LIMIT),
                 "wallets": json.loads(df.to_json(orient='records')),
+                "exchanges": {
+                    "cex": [
+                        {"address": w.address, "chain": w.chain, "labels": w.labels, "entity_type": w.known_entity_type}
+                        for w in db.query(models.WalletAnalysis.address, models.WalletAnalysis.chain, models.WalletAnalysis.labels, models.WalletAnalysis.known_entity_type)
+                        .filter(models.WalletAnalysis.job_id == job_id, models.WalletAnalysis.wallet_type == 'CEX_EXCHANGE').all()
+                    ],
+                    "dex": [
+                        {"address": w.address, "chain": w.chain, "labels": w.labels, "entity_type": w.known_entity_type}
+                        for w in db.query(models.WalletAnalysis.address, models.WalletAnalysis.chain, models.WalletAnalysis.labels, models.WalletAnalysis.known_entity_type)
+                        .filter(models.WalletAnalysis.job_id == job_id, models.WalletAnalysis.wallet_type == 'DEX_ROUTER').all()
+                    ],
+                },
                 "aggregates": {
                     "community_score": community_score,
                     "health_flags": health_flags,

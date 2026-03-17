@@ -137,6 +137,15 @@ def analyze_wallet(job_id: int, address: str, chain: str):
             logger.info(f"Job {job_id} is {job.status}, discarding result for {address}")
             return
 
+        # Skip duplicate — same address+chain already saved for this job (from re-dispatch)
+        existing = db.query(WalletAnalysis).filter(
+            WalletAnalysis.job_id == job_id,
+            WalletAnalysis.address == address,
+            WalletAnalysis.chain == chain,
+        ).first()
+        if existing:
+            return
+
         if analysis_data is not None:
             wallet_record = WalletAnalysis(job_id=job_id, **analysis_data)
             db.add(wallet_record)
