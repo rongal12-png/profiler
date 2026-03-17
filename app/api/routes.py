@@ -65,24 +65,33 @@ def list_jobs(
     db: Session = Depends(get_db),
 ):
     """Returns a list of all analysis jobs, most recent first."""
+    from sqlalchemy import func as _f
     jobs = (
         db.query(models.AnalysisJob)
         .order_by(models.AnalysisJob.created_at.desc())
         .limit(limit)
         .all()
     )
-    result = []
-    for job in jobs:
-        processed = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job.id).count()
-        result.append({
+    if not jobs:
+        return []
+    job_ids = [j.id for j in jobs]
+    counts = dict(
+        db.query(models.WalletAnalysis.job_id, _f.count())
+        .filter(models.WalletAnalysis.job_id.in_(job_ids))
+        .group_by(models.WalletAnalysis.job_id)
+        .all()
+    )
+    return [
+        {
             "job_id": job.id,
             "status": job.status.value if hasattr(job.status, 'value') else job.status,
             "project_name": job.project_name,
             "total_wallets": job.total_wallets,
-            "wallets_processed": processed,
+            "wallets_processed": counts.get(job.id, 0),
             "created_at": str(job.created_at) if job.created_at else None,
-        })
-    return result
+        }
+        for job in jobs
+    ]
 
 
 @router.post("/jobs/submit", tags=["Jobs"])
@@ -415,13 +424,13 @@ def get_job_report(
             _log.exception(f"JSON report generation failed for job {job_id}")
             raise HTTPException(status_code=500, detail=f"Report generation error: {type(e).__name__}: {e}")
     elif format == 'markdown':
-        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name)
+        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name, total_wallets_actual=total_count)
         return Response(content=md_content, media_type='text/markdown')
     elif format == 'html':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html')
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
         return Response(content=html_content, media_type='text/html')
     elif format == 'pdf':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html')
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
         pdf_bytes = reporting.generate_pdf(html_content)
         safe_name = project_name.replace('"', '').replace(' ', '_')
         return Response(
@@ -430,7 +439,7 @@ def get_job_report(
             headers={"Content-Disposition": f'attachment; filename="{safe_name}-report-{job_id}.pdf"'},
         )
     elif format == 'docx':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html')
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=total_count)
         docx_bytes = reporting.generate_docx(html_content, project_name)
         safe_name = project_name.replace('"', '').replace(' ', '_')
         return Response(

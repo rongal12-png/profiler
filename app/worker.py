@@ -239,11 +239,22 @@ def reap_stale_jobs():
                         WalletAnalysis.job_id == job.id
                     ).scalar()
                     stall_cutoff = now - timedelta(minutes=5)
-                    is_stalled = (
-                        last_wallet_time is None or
-                        last_wallet_time.replace(tzinfo=timezone.utc) < stall_cutoff
+                    # If no wallets processed at all, require 30 min from job start before re-dispatching
+                    if last_wallet_time is None:
+                        job_age = (now - job.started_at.replace(tzinfo=timezone.utc)).total_seconds() / 60
+                        is_stalled = job_age > 30
+                    else:
+                        is_stalled = last_wallet_time.replace(tzinfo=timezone.utc) < stall_cutoff
+
+                    # Cooldown: never re-dispatch more than once per 30 minutes
+                    last_redispatch = job.paused_at  # reuse paused_at as redispatch timestamp when job is IN_PROGRESS
+                    redispatch_cooldown = now - timedelta(minutes=30)
+                    already_redispatched_recently = (
+                        last_redispatch is not None and
+                        last_redispatch.replace(tzinfo=timezone.utc) > redispatch_cooldown
                     )
-                    if is_stalled and job.pending_wallets:
+
+                    if is_stalled and not already_redispatched_recently and job.pending_wallets:
                         all_wallets = json.loads(job.pending_wallets)
                         completed_set = {
                             (w.address.lower(), w.chain)
@@ -254,6 +265,7 @@ def reap_stale_jobs():
                             chunk_size = 10_000
                             for i in range(0, len(remaining), chunk_size):
                                 process_wallet_list.delay(job.id, remaining[i:i + chunk_size])
+                            job.paused_at = now  # record redispatch time (reusing column)
                             logger.info(f"Reaper: re-dispatched {len(remaining)} stalled wallets for job {job.id}")
 
         if stale_jobs:

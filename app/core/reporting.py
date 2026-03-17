@@ -498,14 +498,15 @@ def _aggregate_cross_chain(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([single_df, agg_df], ignore_index=True)
 
 
-def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown') -> str:
+def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown', total_wallets_actual: int | None = None) -> str:
     """Generates the full executive intelligence report with narrative-first structure."""
 
     # Aggregate cross-chain scans: one row per unique address with combined financials
     scans_count = len(df)  # total individual chain scans submitted
     df = _aggregate_cross_chain(df)
-    total_wallets = len(df)  # unique addresses after aggregation
-    is_multi_chain = scans_count > total_wallets  # True when multi-chain scanning was used
+    total_wallets = total_wallets_actual or len(df)  # use actual DB total if provided
+    is_multi_chain = scans_count > len(df)  # True when multi-chain scanning was used
+    report_is_sample = total_wallets_actual is not None and total_wallets_actual > len(df)
     failed_count = int(df['notes'].fillna('').str.startswith('Analysis failed:').sum()) if 'notes' in df.columns else 0
     tier_dist = df['tier'].value_counts()
     total_usd = df['est_net_worth_usd'].sum()
