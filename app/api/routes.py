@@ -297,16 +297,76 @@ def get_job_report(
     if job.status not in ('COMPLETED', 'STOPPED'):
         raise HTTPException(status_code=400, detail=f"Job is not complete. Current status: {job.status}")
 
-    results = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job_id).all()
-    if not results:
+    from sqlalchemy import func as _func
+    import math as _math, logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    total_count = db.query(models.WalletAnalysis).filter(models.WalletAnalysis.job_id == job_id).count()
+    if total_count == 0:
         raise HTTPException(status_code=404, detail="No analysis results found for this job.")
 
     project_name = job.project_name or "Project"
+
+    # For CSV: stream all rows without loading into memory
+    if format == 'csv':
+        import io, csv as _csv
+        buf = io.StringIO()
+        first_chunk = True
+        writer = None
+        CHUNK = 5000
+        offset = 0
+        while True:
+            chunk = (
+                db.query(models.WalletAnalysis)
+                .filter(models.WalletAnalysis.job_id == job_id)
+                .order_by(models.WalletAnalysis.investor_score.desc().nullslast())
+                .limit(CHUNK).offset(offset).all()
+            )
+            if not chunk:
+                break
+            for row in chunk:
+                row_dict = {c.name: getattr(row, c.name) for c in row.__table__.columns}
+                if first_chunk:
+                    writer = _csv.DictWriter(buf, fieldnames=list(row_dict.keys()))
+                    writer.writeheader()
+                    first_chunk = False
+                writer.writerow(row_dict)
+            offset += CHUNK
+        return Response(
+            content=buf.getvalue(),
+            media_type='text/csv',
+            headers={"Content-Disposition": f'attachment; filename="{project_name}-report-{job_id}.csv"'},
+        )
+
+    # For all other formats: load top 5000 by score into DataFrame
+    REPORT_LIMIT = 5000
+    results = (
+        db.query(models.WalletAnalysis)
+        .filter(models.WalletAnalysis.job_id == job_id)
+        .order_by(models.WalletAnalysis.investor_score.desc().nullslast())
+        .limit(REPORT_LIMIT)
+        .all()
+    )
     df = reporting.results_to_dataframe(results)
 
+    # DB-level distribution queries (accurate across all wallets, not just top 5000)
+    tier_dist = dict(
+        db.query(models.WalletAnalysis.tier, _func.count())
+        .filter(models.WalletAnalysis.job_id == job_id)
+        .group_by(models.WalletAnalysis.tier).all()
+    )
+    chain_dist = dict(
+        db.query(models.WalletAnalysis.chain, _func.count())
+        .filter(models.WalletAnalysis.job_id == job_id)
+        .group_by(models.WalletAnalysis.chain).all()
+    )
+    wtype_dist = dict(
+        db.query(models.WalletAnalysis.wallet_type, _func.count())
+        .filter(models.WalletAnalysis.job_id == job_id)
+        .group_by(models.WalletAnalysis.wallet_type).all()
+    )
+
     if format == 'json':
-        import math as _math, logging as _logging
-        _log = _logging.getLogger(__name__)
         try:
             community_score = project_health.compute_community_quality_score(df)
             health_flags = project_health.compute_health_flags(df)
@@ -318,7 +378,8 @@ def get_job_report(
                 "project_name": project_name,
                 "job_id": job_id,
                 "reference_id": reporting.generate_reference_id(job_id),
-                "total_wallets": len(df),
+                "total_wallets": total_count,
+                "report_includes_top": min(total_count, REPORT_LIMIT),
                 "wallets": json.loads(df.to_json(orient='records')),
                 "aggregates": {
                     "community_score": community_score,
@@ -326,10 +387,10 @@ def get_job_report(
                     "concentration_metrics": concentration_metrics,
                     "token_intelligence": token_intel_agg,
                     "intent_signals": intent_agg,
-                    "tier_distribution": df['tier'].value_counts().to_dict() if 'tier' in df.columns else {},
+                    "tier_distribution": tier_dist,
                     "persona_distribution": df['persona'].value_counts().to_dict() if 'persona' in df.columns else {},
-                    "chain_distribution": df['chain'].value_counts().to_dict() if 'chain' in df.columns else {},
-                    "wallet_type_distribution": df['wallet_type'].value_counts().to_dict() if 'wallet_type' in df.columns else {},
+                    "chain_distribution": chain_dist,
+                    "wallet_type_distribution": wtype_dist,
                 },
             }
 
@@ -341,13 +402,6 @@ def get_job_report(
         except Exception as e:
             _log.exception(f"JSON report generation failed for job {job_id}")
             raise HTTPException(status_code=500, detail=f"Report generation error: {type(e).__name__}: {e}")
-    elif format == 'csv':
-        csv_content = df.to_csv(index=False)
-        return Response(
-            content=csv_content,
-            media_type='text/csv',
-            headers={"Content-Disposition": f'attachment; filename="{project_name}-report-{job_id}.csv"'},
-        )
     elif format == 'markdown':
         md_content = reporting.generate_executive_report(df, job_id, project_name=project_name)
         return Response(content=md_content, media_type='text/markdown')
