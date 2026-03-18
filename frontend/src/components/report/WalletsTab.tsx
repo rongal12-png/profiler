@@ -26,7 +26,14 @@ export default function WalletsTab({ wallets }: Props) {
 
   const tiers = useMemo(() => [...new Set(wallets.map((w) => w.tier))].sort(), [wallets]);
   const types = useMemo(() => [...new Set(wallets.map((w) => w.wallet_type))].sort(), [wallets]);
-  const chains = useMemo(() => [...new Set(wallets.map((w) => w.chain))].sort(), [wallets]);
+  // Build chain options from scan_chains (may be comma-separated for multi-chain wallets)
+  const chains = useMemo(() => {
+    const all = new Set<string>();
+    wallets.forEach((w) => {
+      (w.scan_chains || w.chain || "").split(",").forEach((c) => { const t = c.trim(); if (t) all.add(t); });
+    });
+    return [...all].sort();
+  }, [wallets]);
 
   const filtered = useMemo(() => {
     let result = wallets;
@@ -36,7 +43,9 @@ export default function WalletsTab({ wallets }: Props) {
     }
     if (tierFilter !== "all") result = result.filter((w) => w.tier === tierFilter);
     if (typeFilter !== "all") result = result.filter((w) => w.wallet_type === typeFilter);
-    if (chainFilter !== "all") result = result.filter((w) => w.chain === chainFilter);
+    if (chainFilter !== "all") result = result.filter((w) =>
+      (w.scan_chains || w.chain || "").split(",").map((c) => c.trim()).includes(chainFilter)
+    );
 
     result = [...result].sort((a, b) => {
       const av = a[sortKey] ?? 0;
@@ -96,7 +105,7 @@ export default function WalletsTab({ wallets }: Props) {
           <thead className="bg-gray-50">
             <tr>
               <SortHeader label="Address" field="address" />
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Chain</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Chains</th>
               <SortHeader label="Tier" field="tier" />
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
               <SortHeader label="Persona" field="persona" />
@@ -109,7 +118,7 @@ export default function WalletsTab({ wallets }: Props) {
           <tbody className="divide-y divide-gray-100 bg-white">
             {pageWallets.map((w) => (
               <WalletRow
-                key={`${w.address}-${w.chain}`}
+                key={w.address}
                 wallet={w}
                 expanded={expandedAddr === w.address}
                 onToggle={() => setExpandedAddr(expandedAddr === w.address ? null : w.address)}
@@ -150,7 +159,11 @@ function WalletRow({ wallet: w, expanded, onToggle }: { wallet: WalletRecord; ex
     <>
       <tr className="hover:bg-gray-50 cursor-pointer" onClick={onToggle}>
         <td className="px-3 py-2.5 text-sm font-mono text-blue-600">{truncateAddress(w.address)}</td>
-        <td className="px-3 py-2.5 text-sm text-gray-600">{w.chain}</td>
+        <td className="px-3 py-2.5 text-sm text-gray-600 whitespace-nowrap" title={w.scan_chains || w.chain}>
+          {w.scan_chains && w.scan_chains !== w.chain
+            ? <span>{w.scan_chains.split(",").length} chains</span>
+            : <span>{w.chain}</span>}
+        </td>
         <td className="px-3 py-2.5"><TierBadge tier={w.tier} /></td>
         <td className="px-3 py-2.5">
           <Badge label={w.wallet_type.replace(/_/g, " ")} color={w.wallet_type === "USER" ? "blue" : "gray"} />
@@ -181,6 +194,16 @@ function ExpandedRow({ wallet: w }: { wallet: WalletRecord }) {
   return (
     <tr>
       <td colSpan={9} className="px-3 py-4 bg-gray-50">
+        {/* Multi-chain summary */}
+        {w.scan_chains && w.scan_chains !== w.chain && (
+          <div className="mb-3 flex flex-wrap gap-3 text-xs text-gray-600">
+            <span><span className="font-medium">Scanned:</span> {w.scan_chains}</span>
+            {w.chains_with_assets && (
+              <span><span className="font-medium">Has funds on:</span> {w.chains_with_assets || "—"}</span>
+            )}
+            <span><span className="font-medium">Combined net worth:</span> {formatUsd(w.est_net_worth_usd)}</span>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Scores */}
           <div>

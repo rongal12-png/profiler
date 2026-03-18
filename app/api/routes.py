@@ -385,11 +385,14 @@ def get_job_report(
 
     if format == 'json':
         try:
-            community_score = project_health.compute_community_quality_score(df)
-            health_flags = project_health.compute_health_flags(df)
-            concentration_metrics = project_health.compute_concentration_metrics(df)
-            token_intel_agg = reporting._aggregate_token_intelligence(df)
-            intent_agg = reporting._aggregate_intent_signals(df)
+            # Merge multi-chain rows: one wallet per address with combined funds
+            df_agg = reporting._aggregate_cross_chain(df)
+
+            community_score = project_health.compute_community_quality_score(df_agg)
+            health_flags = project_health.compute_health_flags(df_agg)
+            concentration_metrics = project_health.compute_concentration_metrics(df_agg)
+            token_intel_agg = reporting._aggregate_token_intelligence(df_agg)
+            intent_agg = reporting._aggregate_intent_signals(df_agg)
 
             response_data = {
                 "project_name": project_name,
@@ -399,7 +402,7 @@ def get_job_report(
                 "total_chain_scans": total_count,
                 "chains_scanned": chains_scanned,
                 "report_includes_top": min(unique_addresses, REPORT_LIMIT),
-                "wallets": json.loads(df.to_json(orient='records')),
+                "wallets": json.loads(df_agg.to_json(orient='records')),
                 "exchanges": {
                     "cex": [
                         {"address": w.address, "chain": w.chain, "labels": w.labels, "entity_type": w.known_entity_type}
@@ -419,7 +422,7 @@ def get_job_report(
                     "token_intelligence": token_intel_agg,
                     "intent_signals": intent_agg,
                     "tier_distribution": tier_dist,
-                    "persona_distribution": df['persona'].value_counts().to_dict() if 'persona' in df.columns else {},
+                    "persona_distribution": df_agg['persona'].value_counts().to_dict() if 'persona' in df_agg.columns else {},
                     "chain_distribution": chain_dist,
                     "wallet_type_distribution": wtype_dist,
                 },

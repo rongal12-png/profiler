@@ -43,7 +43,9 @@ export interface IntentSignals {
 
 export interface WalletRecord {
   address: string;
-  chain: string;
+  chain: string;           // primary chain (highest USD value)
+  scan_chains: string;     // all chains scanned, comma-separated (e.g. "arbitrum, ethereum")
+  chains_with_assets: string; // chains where wallet has actual holdings
   tier: string;
   wallet_type: string;
   investor_score: number;
