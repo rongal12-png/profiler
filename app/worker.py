@@ -162,7 +162,12 @@ def analyze_wallet(job_id: int, address: str, chain: str):
             db.add(failed_record)
             db.commit()
     except Exception as e:
-        logger.error(f"Failed to save result for wallet {address}: {e}", exc_info=True)
+        from sqlalchemy.exc import IntegrityError
+        if isinstance(e, IntegrityError):
+            # Two concurrent tasks finished the same wallet — the first writer wins, discard ours
+            logger.debug(f"Duplicate insert race for {address} on {chain} (job {job_id}), discarding")
+        else:
+            logger.error(f"Failed to save result for wallet {address}: {e}", exc_info=True)
         db.rollback()
     finally:
         db.close()
