@@ -294,16 +294,18 @@ A clear understanding of non-user wallets is essential for accurate analytics an
 {% if sanctions_enabled %}
 ### Sanctions Screening
 
+> ⚠️ **Experimental Notice:** This sanctions check is automated and experimental. It is provided for preliminary informational purposes only and does **not** constitute a legal compliance opinion or replace a review by a qualified compliance officer, legal counsel, or licensed screening provider. Address matching is based on publicly available list data and may produce false positives or miss matches due to address format variations, list update delays, or incomplete data. **Do not rely solely on this output for regulatory, legal, or operational decisions.**
+
 {% if sanctions_count > 0 %}
-**{{ sanctions_count }}** wallet{{ "s" if sanctions_count != 1 else "" }} matched entries on international sanctions lists (OFAC SDN, EU Consolidated, Israel NBCTF). These addresses should be reviewed immediately and may require blocking or reporting depending on your jurisdiction and compliance obligations.
+**{{ sanctions_count }}** wallet{{ "s" if sanctions_count != 1 else "" }} returned a potential match against entries on international sanctions lists (OFAC SDN, EU Consolidated, Israel NBCTF). Each flagged address should be independently verified by a qualified compliance professional before any action is taken.
 
 | Address | Chain | Sanctions List | Entity | Net Worth |
 |---|---|---|---|---|
 {% for w in sanctions_wallets %}
-| `{{ w.address }}` | {{ w.chain }} | {{ w.list_name }} | {{ w.entity_name }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} |
+| `{{ w.address }}` | {{ w.chain }} | {{ w.list_name or "Unknown" }} | {{ w.entity_name or "Unknown" }} | ${{ "%.2f"|format(w.est_net_worth_usd) }} |
 {% endfor %}
 {% else %}
-No wallets in this set matched any entries on the OFAC SDN, EU Consolidated, or Israel NBCTF sanctions lists. This is a positive compliance signal, though periodic re-screening is recommended as sanctions lists are updated regularly.
+No wallets in this set returned a match against the OFAC SDN, EU Consolidated, or Israel NBCTF sanctions lists at the time of scanning. This is not a definitive clearance — sanctions lists are updated frequently and this check should be repeated periodically using an authoritative screening service.
 {% endif %}
 {% endif %}
 
