@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary — Company View
 
-This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** unique addresses across **{{ chains_scanned }}** chain{{ "s" if chains_scanned > 1 else "" }}{% if is_multi_chain %} ({{ scans_count }} cross-chain scans aggregated){% endif %}. The total estimated value controlled by these wallets is **{{ total_usd_controlled }}**.
+This report provides a comprehensive intelligence overview of **{{ project_name }}**'s wallet base, covering **{{ total_wallets }}** unique addresses across **{{ chains_scanned }}** chain{{ "s" if chains_scanned > 1 else "" }}{% if is_multi_chain %} ({{ scans_count }} cross-chain scans aggregated){% endif %}. The total estimated value controlled by these wallets is **{{ total_usd_controlled or "not available" }}**.
 {% if is_multi_chain %}
 > **Multi-Chain Scan:** Each wallet's holdings were aggregated across all scanned networks. A wallet holding assets on both Ethereum and Base appears as a single entry with combined net worth. The "Chains with Holdings" column in the appendix tables shows which networks each wallet is active on.
 {% endif %}
@@ -20,19 +20,20 @@ No wallets were classified as real end-users. This may indicate a data set compo
 {% endif %}
 
 {% if whale_count > 0 %}
-Among real users, **{{ whale_count }}** wallet{{ "s" if whale_count != 1 else "" }} qualified as **Whales** (investor score ≥ 55 or identified VC/KOL), holding a combined **{{ whale_usd }}** and representing the most strategically important segment for partnership and VIP outreach. **{{ tuna_count }}** wallet{{ "s" if tuna_count != 1 else "" }} are **Tuna** — active investors with moderate portfolios who are prime candidates for community programs. The remaining **{{ fish_count }}** are **Fish** — smaller or less-active users who may respond to growth campaigns and incentive programs.
+Among real users, **{{ whale_count }}** wallet{{ "s" if whale_count != 1 else "" }} qualified as **Whales** (investor score ≥ 55 or identified VC/KOL), holding a combined **{{ whale_usd or "$0.00" }}** and representing the most strategically important segment for partnership and VIP outreach. **{{ tuna_count }}** wallet{{ "s" if tuna_count != 1 else "" }} are **Tuna** — active investors with moderate portfolios who are prime candidates for community programs. The remaining **{{ fish_count }}** are **Fish** — smaller or less-active users who may respond to growth campaigns and incentive programs.
 {% else %}
 No wallets in this set reached Whale status. The user base is composed of **{{ tuna_count }}** Tuna (moderate investors) and **{{ fish_count }}** Fish (smaller or newer users). This is common for early-stage projects or sets focused on community members rather than institutional participants.
 {% endif %}
 
-The average investor quality score across all real users is **{{ avg_investor_score }}** / 100. {{ "This suggests strong investor quality with experienced DeFi participants." if avg_investor_score|float > 40 else "This suggests moderate quality — the base contains a mix of experienced and newer participants." if avg_investor_score|float > 25 else "This suggests an early-stage community with mostly new or small participants — growth efforts should focus on activation and education." }}
+{% set _avg_score = avg_investor_score|float %}
+The average investor quality score across all real users is **{{ avg_investor_score if avg_investor_score != "nan" else "N/A" }}**{% if avg_investor_score != "nan" %} / 100{% endif %}. {% if _avg_score > 40 %}This suggests strong investor quality with experienced DeFi participants.{% elif _avg_score > 25 %}This suggests moderate quality — the base contains a mix of experienced and newer participants.{% elif user_count > 0 %}This suggests an early-stage community with mostly new or small participants — growth efforts should focus on activation and education.{% else %}Insufficient user data to determine average quality.{% endif %}
 
 | Metric | Value |
 |---|---|
 | **Total Wallets Analyzed** | {{ total_wallets }}{% if failed_count > 0 %} (⚠ {{ failed_count }} failed — see note below){% endif %} |
 | **Real Users** | {{ user_count }} ({{ user_pct }}%) |
 | **Infrastructure Wallets** | {{ infra_total }} (CEX: {{ cex_count }}, DEX: {{ dex_count }}, Bridge: {{ bridge_count }}, Protocol: {{ protocol_count }}, Contract: {{ contract_count }}) |
-| **Total Estimated USD** | {{ total_usd_controlled }} |
+| **Total Estimated USD** | {{ total_usd_controlled or "Not available" }} *(on-chain balances only; excludes off-chain assets)* |
 | **Whale / Tuna / Fish** | {{ whale_count }} / {{ tuna_count }} / {{ fish_count }} |
 | **Average Investor Score** | {{ avg_investor_score }} |
 | **Community Quality Score** | {{ community_score.score }} ({{ community_score.grade }}) |
@@ -94,15 +95,17 @@ Understanding who your users are — and how they behave — is critical for pro
 
 ### Investor Quality
 
-The multi-component scoring model evaluates each wallet across five dimensions: balance strength, transaction activity, DeFi engagement, reputation signals, and sybil risk. The composite **investor score** weights these factors to produce a single quality metric per wallet.
+The multi-component scoring model evaluates each wallet across five dimensions: balance strength, transaction activity, DeFi engagement, reputation signals, and sybil risk. The composite **investor score** weights these factors to produce a single quality metric per wallet (0–100 scale).
+
+> **Data sources:** Estimated net worth = native token balance (USD) + ERC-20 stablecoin balances, capped at $1B per wallet to filter decimal errors. Activity is derived from on-chain transaction count. DeFi score reflects token diversity and stablecoin allocation. Scores marked *N/A* indicate wallets with insufficient on-chain data at scan time.
 
 | Component | Average Score | What It Measures |
 |---|---|---|
-| **Balance Score** | {{ score_averages.balance_score }} | USD value held (log-scaled) |
-| **Activity Score** | {{ score_averages.activity_score }} | Transaction count as engagement proxy |
-| **DeFi Investor Score** | {{ score_averages.defi_investor_score }} | Token diversity, stablecoin dry powder, active investing |
-| **Reputation Score** | {{ score_averages.reputation_score }} | Known identity (VC/KOL boost, infra penalty) |
-| **Sybil Risk Score** | {{ score_averages.sybil_risk_score }} | Bot/farming likelihood (lower is better) |
+| **Balance Score** | {{ score_averages.balance_score or "N/A" }} | USD value held (log-scaled) |
+| **Activity Score** | {{ score_averages.activity_score or "N/A" }} | Transaction count as engagement proxy |
+| **DeFi Investor Score** | {{ score_averages.defi_investor_score or "N/A" }} | Token diversity, stablecoin dry powder, active investing |
+| **Reputation Score** | {{ score_averages.reputation_score or "N/A" }} | Known identity (VC/KOL boost, infra penalty) |
+| **Sybil Risk Score** | {{ score_averages.sybil_risk_score or "N/A" }} | Bot/farming likelihood (lower is better) |
 
 {% if plots.investor_score_hist %}
 ![Investor Score Distribution](data:image/png;base64,{{ plots.investor_score_hist }})
@@ -113,7 +116,7 @@ The multi-component scoring model evaluates each wallet across five dimensions: 
 Each wallet is assigned a primary persona based on behavioral signals. Understanding your persona mix helps tailor product features and communication.
 
 {% for persona, count in persona_distribution.items() %}
-- **{{ persona }}**: {{ count }} wallets ({{ "%.1f"|format(count / total_wallets * 100) }}%){% if persona == "Trader" %} — Active market participants who swap and position frequently. Consider advanced trading features and real-time alerts.{% elif persona == "Long-term Holder" %} — Patient capital that holds through cycles. Consider staking programs and governance rights.{% elif persona == "Farmer" %} — Yield-seeking users who move across protocols. Consider competitive APY and composability.{% elif persona == "Airdrop Hunter" %} — High activity with low holdings, potentially farming rewards. Monitor for sybil behavior.{% elif persona == "Infra" %} — Infrastructure wallets (exchanges, routers, bridges). Not end-users.{% elif persona == "Staker" %} — Users with significant staked positions, signaling long-term commitment and governance interest.{% elif persona == "Newcomer" %} — New or small participants with few transactions. Prioritize onboarding and education.{% endif %}
+- **{{ persona }}**: {{ count }} wallet{{ "s" if count != 1 else "" }} ({{ "%.1f"|format(count / total_wallets * 100) if total_wallets > 0 else "0.0" }}%){% if persona == "Trader" %} — Active market participants who swap and position frequently. Consider advanced trading features and real-time alerts.{% elif persona == "Long-term Holder" %} — Patient capital that holds through cycles. Consider staking programs and governance rights.{% elif persona == "Farmer" %} — Yield-seeking users who move across protocols. Consider competitive APY and composability.{% elif persona == "Airdrop Hunter" %} — High activity with low holdings, potentially farming rewards. Monitor for sybil behavior.{% elif persona == "Infra" %} — Infrastructure wallets (exchanges, routers, bridges). Not end-users.{% elif persona == "Staker" %} — Users with significant staked positions, signaling long-term commitment and governance interest.{% elif persona == "Newcomer" %} — New or small participants with few transactions. Prioritize onboarding and education.{% endif %}
 {% endfor %}
 
 {% if plots.persona_dist_pie %}
@@ -219,7 +222,7 @@ This section analyzes investment readiness and intent signals across the wallet 
 | **Medium** | {{ intent_agg.readiness.medium|default(0) }} | Some positive signals — engaged but moderate positioning |
 | **Low** | {{ intent_agg.readiness.low|default(0) }} | Few signals — passive, new, or small participants |
 
-**Total Estimated Deployable Capital:** ${{ "%.2f"|format(intent_agg.total_deployable_usd) }}
+**Total Estimated Deployable Capital:** ${{ "%.2f"|format(intent_agg.total_deployable_usd) if intent_agg.total_deployable_usd is not none else "N/A" }}
 This represents the combined stablecoin and liquid native token holdings across all wallets — capital that could be deployed into new investments.
 
 {% if intent_agg.signal_counts %}

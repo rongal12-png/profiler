@@ -498,6 +498,46 @@ def _aggregate_cross_chain(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([single_df, agg_df], ignore_index=True)
 
 
+def _safe_float(val, default: float = 0.0) -> float:
+    """Return val as float, replacing NaN/None/inf with default."""
+    try:
+        f = float(val)
+        return f if math.isfinite(f) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _fmt_usd(val) -> str:
+    """Format a value as USD string, always producing a readable result."""
+    f = _safe_float(val)
+    return f"${f:,.2f}"
+
+
+def _fmt_score(val) -> str:
+    """Format a score value as a 1-decimal string, never 'nan'."""
+    f = _safe_float(val)
+    return f"{f:.1f}"
+
+
+def _validate_rendered(md: str) -> str:
+    """
+    Scan the rendered markdown for known broken-sentence patterns and
+    replace them with safe fallback text. This is a last-resort safety net.
+    """
+    import re as _re
+    # Pattern: "is ." or "is **.**" — a sentence ending immediately after a verb
+    md = _re.sub(r'\bis \*\*\.\*\*', 'is **$0.00**.', md)
+    md = _re.sub(r'\bis \.\b', 'is currently unavailable.', md)
+    # Pattern: "combined  and" (empty between combined and and)
+    md = _re.sub(r'combined\s+\*\*\*\*\s+and', 'combined **$0.00** and', md)
+    md = _re.sub(r'combined\s+and\b', 'combined an undetermined amount and', md)
+    # Pattern: "wallets are —" (empty before em-dash)
+    md = _re.sub(r'wallets are\s+—', 'wallets are present —', md)
+    # Pattern: value placeholder still empty: "{{ ... }}"
+    md = _re.sub(r'\{\{[^}]+\}\}', '[DATA UNAVAILABLE]', md)
+    return md
+
+
 def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown', total_wallets_actual: int | None = None, chains_scanned: int | None = None) -> str:
     """Generates the full executive intelligence report with narrative-first structure."""
 
@@ -510,7 +550,9 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     report_is_sample = total_wallets_actual is not None and total_wallets_actual > len(df)
     failed_count = int(df['notes'].fillna('').str.startswith('Analysis failed:').sum()) if 'notes' in df.columns else 0
     tier_dist = df['tier'].value_counts()
-    total_usd = df['est_net_worth_usd'].sum()
+    # Ensure est_net_worth_usd is numeric; replace any None/NaN with 0
+    df['est_net_worth_usd'] = pd.to_numeric(df['est_net_worth_usd'], errors='coerce').fillna(0.0)
+    total_usd = _safe_float(df['est_net_worth_usd'].sum())
     chain_dist = df['chain'].value_counts()
     persona_dist = df['persona'].value_counts()
 
@@ -530,14 +572,14 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     whale_count = int((users_df['tier'] == 'Whale').sum())
     tuna_count = int((users_df['tier'] == 'Tuna').sum())
     fish_count = int((users_df['tier'] == 'Fish').sum())
-    whale_usd_val = users_df[users_df['tier'] == 'Whale']['est_net_worth_usd'].sum()
-    whale_usd = f"${whale_usd_val:,.2f}"
+    whale_usd_val = _safe_float(users_df[users_df['tier'] == 'Whale']['est_net_worth_usd'].fillna(0).sum())
+    whale_usd = _fmt_usd(whale_usd_val)
 
     # Scoring averages (users only, or all if no users)
     score_df = users_df if len(users_df) > 0 else df
     score_cols = ['balance_score', 'activity_score', 'defi_investor_score', 'reputation_score', 'sybil_risk_score']
-    score_averages = {col: f"{score_df[col].mean():.1f}" for col in score_cols}
-    avg_investor_score = f"{score_df['investor_score'].mean():.1f}"
+    score_averages = {col: _fmt_score(score_df[col].mean()) if col in score_df.columns and len(score_df) > 0 else "0.0" for col in score_cols}
+    avg_investor_score = _fmt_score(score_df['investor_score'].mean()) if 'investor_score' in score_df.columns and len(score_df) > 0 else "0.0"
 
     # Risk
     concentration_whales = df[df['tier'] == 'Whale']
@@ -660,7 +702,7 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
         "scans_count": scans_count,
         "is_multi_chain": is_multi_chain,
         "failed_count": failed_count,
-        "total_usd_controlled": f"${total_usd:,.2f}",
+        "total_usd_controlled": _fmt_usd(total_usd),
         "chain_count": len(chain_dist),
         # Wallet type counts
         "user_count": user_count,
@@ -721,6 +763,7 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
 
     template = jinja_env.get_template('report_template.md')
     md_report = template.render(context)
+    md_report = _validate_rendered(md_report)
 
     if output_format == 'html':
         html_report = markdown2.markdown(md_report, extras=["tables", "fenced-code-blocks"])
