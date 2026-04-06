@@ -191,6 +191,39 @@ export interface SettingsHistoryEntry {
   settings_json: Record<string, unknown>;
 }
 
+// --- Project workspace ---
+
+export interface ProjectSummary {
+  id: number;
+  name: string;
+  description: string | null;
+  wallet_count: number;
+  created_at: string;
+  run_count: number;
+  last_run_at: string | null;
+  last_status: JobStatus | null;
+}
+
+export interface ProjectRun {
+  job_id: number;
+  status: JobStatus;
+  total_wallets: number;
+  wallets_processed: number;
+  created_at: string | null;
+  completed_at: string | null;
+  elapsed_seconds: number | null;
+  result: string | null;
+}
+
+export interface ProjectDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  wallet_count: number;
+  created_at: string;
+  runs: ProjectRun[];
+}
+
 // --- Recent job (localStorage) ---
 
 export interface RecentJob {

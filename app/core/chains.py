@@ -11,10 +11,12 @@ if _LABELS_FILE.exists():
 
 # Build lookup index: {chain: {address_lower: {type, name, confidence, source}}}
 KNOWN_LABELS: dict[str, dict[str, dict]] = {}
+_CASE_SENSITIVE_CHAINS = {"solana", "ton"}
+
 for _entry in _labels_data:
     _chain = _entry["chain"]
     _addr = _entry["address"]
-    if _chain != "solana":
+    if _chain not in _CASE_SENSITIVE_CHAINS:
         _addr = _addr.lower()
     KNOWN_LABELS.setdefault(_chain, {})[_addr] = {
         "type": _entry["label_type"],
@@ -210,6 +212,47 @@ CHAIN_CONFIG = {
             "JTO": "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL",
         },
     },
+    "ton": {
+        "id": "ton",
+        "rpc_url": settings.TON_RPC_URL,
+        "native_symbol": "TON",
+        "coingecko_id": "the-open-network",
+        # Jetton addresses (user-friendly bounceable format)
+        "stables": {
+            "USDT": "EQBynBO23ywHy_CgarY9NK9FTz0yDsG82PtcbSTQgGoXwiuA",  # Tether USD on TON
+            "USDC": "EQB-MPwrd1G6WKNkLz_VnV6WqBDd142KMQv-g1O-8QUA3728",  # Orbiter USDC
+        },
+        "top_tokens": {
+            "STON": "EQA2kCVNwVsil2EM2mB0SkXytxCqQjS4mttjDpnXmwG9T6bO",   # STON.fi governance
+            "DOGS": "EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS",   # DOGS meme token
+        },
+        "staked_tokens": {
+            "tsTON": "EQC98_qAmNEptUtPc7W6xdHh_ZHrBUFpw5Ft_IzBovkMslek",  # TON Liquid Staking
+            "stTON": "EQDNhy-nxYFgisHqmgH3bAvUFR66dOlBsKCaFMT07rdvJygK",  # Bemo staked TON
+        },
+        "governance_tokens": {
+            "STON": "EQA2kCVNwVsil2EM2mB0SkXytxCqQjS4mttjDpnXmwG9T6bO",   # STON.fi
+            "SCALE": "EQBlqsm144Dq6SjbPI4jjZvA1hqTIP3CvHovbIfW_t-SCALE",  # Tonkeeper governance
+        },
+    },
+    "hedera": {
+        "id": 295,
+        "rpc_url": settings.HEDERA_RPC_URL,
+        "native_symbol": "HBAR",
+        "coingecko_id": "hedera-hashgraph",
+        # Token addresses use Hedera EVM format: 0x + zero-padded token ID (in hex)
+        # e.g. token 0.0.456858 → hex(456858)=0x6F89A → 0x000000000000000000000000000000000006f89a
+        "stables": {
+            "USDC": "0x000000000000000000000000000000000006f89a",  # token 0.0.456858
+        },
+        "top_tokens": {
+            "SAUCE": "0x00000000000000000000000000000000000b2995",  # token 0.0.731029 — SaucerSwap DEX token
+        },
+        "staked_tokens": {
+            "HBARX": "0x00000000000000000000000000000000000cba44",  # token 0.0.834116 — Stader staked HBAR
+        },
+        "governance_tokens": {},
+    },
 }
 
 
@@ -224,7 +267,7 @@ def get_chain_config(chain_name: str):
 
 def get_known_label(chain: str, address: str) -> dict | None:
     """Gets a known label for an address. Returns {type, name, confidence, source} or None."""
-    lookup_addr = address if chain == "solana" else address.lower()
+    lookup_addr = address if chain in _CASE_SENSITIVE_CHAINS else address.lower()
     return KNOWN_LABELS.get(chain, {}).get(lookup_addr)
 
 

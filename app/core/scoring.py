@@ -42,12 +42,15 @@ def compute_defi_investor_score(
     stable_usd_total: float,
     top_token_count: int,
     est_net_worth_usd: float,
+    staked_share: float = 0.0,
+    has_governance_tokens: bool = False,
 ) -> float:
     """
     Heuristic for DeFi/investor behavior.
     - Holding multiple token types suggests active investing
     - High stablecoin ratio suggests dry powder / ready to invest
     - Moderate tx count with holdings suggests real usage
+    - Staking and governance participation are strong DeFi commitment signals
     """
     score = 0.0
 
@@ -72,6 +75,18 @@ def compute_defi_investor_score(
         score += 15
     elif tx_count >= 5:
         score += 5
+
+    # Staking: long-term DeFi commitment signal — illiquid position = conviction
+    if staked_share >= 0.5:
+        score += 20
+    elif staked_share >= 0.2:
+        score += 12
+    elif staked_share >= 0.05:
+        score += 5
+
+    # Governance: holding governance tokens signals protocol-level engagement
+    if has_governance_tokens:
+        score += 15
 
     return min(round(score, 1), 100.0)
 
@@ -118,10 +133,17 @@ def compute_sybil_risk_score(
     est_net_worth_usd: float,
     is_contract: bool,
     known_entity_type: str,
+    wallet_age_days: int = 0,
 ) -> float:
     """
     Higher score = more suspicious.
-    Sybil indicators: low balance, very high or very low tx count, contract addresses.
+
+    Sybil indicators (additive):
+    - Contract masquerading as user: +40
+    - Classic airdrop farming: low balance + high tx count
+    - Gas-only wallet: near-zero native balance with meaningful tx activity (funded just enough to interact)
+    - Round-number tx count: farmers often hit exact targets (10, 20, 50 txs exactly)
+    - Age signal (if available): very new wallet with burst of activity
     """
     score = 0.0
 
@@ -129,15 +151,33 @@ def compute_sybil_risk_score(
     if is_contract and known_entity_type == "user":
         score += 40
 
-    # Very low balance with some activity (airdrop farming pattern)
+    # Classic airdrop farming: very low value relative to activity
     if est_net_worth_usd < 10 and tx_count > 20:
         score += 30
     elif est_net_worth_usd < 100 and tx_count > 100:
         score += 25
 
+    # Gas-only wallet: funded with just enough to make transactions — no real holdings
+    # Distinct from the dust check below: these wallets ARE active, just perpetually empty
+    if est_net_worth_usd < 2 and tx_count >= 5:
+        score += 20
+
     # Zero balance, zero activity (dust/dead wallet)
     if est_net_worth_usd < 1 and tx_count <= 1:
         score += 20
+
+    # Round-number tx pattern: airdrop hunters often hit exact targets before stopping
+    # Only suspicious when combined with low holdings (not for legitimate active users)
+    if est_net_worth_usd < 200 and tx_count in {5, 10, 15, 20, 25, 30, 50, 100}:
+        score += 10
+
+    # Wallet age signal: burst activity on a very new wallet is suspicious
+    # Only apply when age data is available (wallet_age_days > 0)
+    if wallet_age_days > 0:
+        if wallet_age_days < 30 and tx_count > 15:
+            score += 25  # very new + many txs = likely sybil burst
+        elif wallet_age_days < 90 and tx_count > 50:
+            score += 12  # young wallet + high activity
 
     # Known infra is not sybil, it's just infra
     if known_entity_type in ("exchange", "bridge", "protocol", "dex_router"):
@@ -174,10 +214,11 @@ def determine_tier(
     label_types: list[str],
     thresholds: dict | None = None,
     wallet_type: str = "USER",
+    est_net_worth_usd: float = 0.0,
 ) -> str:
     """
-    Whale: high investor_score OR VC/KOL labeled OR high defi+launchpad investing
-    Tuna: medium investor_score with real activity
+    Whale: high investor_score OR VC/KOL labeled OR capital >= $1M
+    Tuna: medium investor_score OR capital >= $100K
     Fish: low investor_score or low engagement
     Infra: exchange/bridge/protocol/contract
     Accepts optional thresholds dict with 'whale' and 'tuna' keys.
@@ -201,6 +242,13 @@ def determine_tier(
         if lt in ("vc", "kol", "smart_money"):
             return "Whale"
 
+    # Capital-based floors: large capital is always Whale/Tuna regardless of score
+    usd = float(est_net_worth_usd or 0)
+    if usd >= 1_000_000:
+        return "Whale"
+    if usd >= 100_000:
+        return "Tuna" if investor_score < whale_threshold else "Whale"
+
     if investor_score >= whale_threshold:
         return "Whale"
     elif investor_score >= tuna_threshold:
@@ -219,7 +267,20 @@ def determine_persona(
     staked_share: float = 0.0,
     has_governance_tokens: bool = False,
 ) -> str:
-    """Assign a primary persona based on behavioral heuristics."""
+    """
+    Assign a primary persona based on behavioral heuristics.
+
+    Priority order (highest specificity first):
+    1. Infra — contract or known infra entity
+    2. Airdrop Hunter — confirmed sybil signal
+    3. Newcomer — very new/small wallet
+    4. Staker — staking is primary activity (any meaningful staked share)
+    5. Long-term Holder — low activity, holds value
+    6. Trader — high activity + meaningful value
+    7. Farmer — moderate activity across protocols
+    8. Airdrop Hunter (lower confidence) — high activity + low value
+    9. Long-term Holder (default for moderate-value, low-activity)
+    """
     if is_contract or known_entity_type in ("exchange", "bridge", "protocol", "dex_router"):
         return "Infra"
 
@@ -229,35 +290,41 @@ def determine_persona(
     total_value = est_net_worth_usd + stable_usd_total
     stable_ratio = stable_usd_total / total_value if total_value > 0 else 0
 
-    # Newcomer: very low activity + small value
-    if tx_count <= 5 and total_value < 1000 and total_value > 0:
+    # Newcomer: very low activity + small wallet (raised threshold from $1K to $5K)
+    if tx_count <= 5 and total_value < 5_000 and total_value > 0:
         return "Newcomer"
 
-    # Staker: significant staked positions
-    if staked_share > 0.3 and total_value > 100:
+    # Staker: any meaningful staked share (lowered from 0.3 to 0.1, enough to signal commitment)
+    # Requires enough value to be a real position, not just dust
+    if staked_share >= 0.1 and total_value > 500:
         return "Staker"
 
-    # High stablecoin ratio + low activity = holder waiting to deploy
-    if stable_ratio > 0.7 and tx_count < 20 and total_value > 1000:
+    # High stablecoin dry powder + low activity = capital allocator waiting to deploy
+    # Use governance/staking as a tiebreaker: real holders often have both
+    if stable_ratio > 0.7 and tx_count < 30 and total_value > 1_000:
         return "Long-term Holder"
 
-    # High activity + high value = trader
-    if tx_count > 100 and total_value > 10_000:
+    # High activity + meaningful value = active trader
+    if tx_count > 100 and total_value > 5_000:
         return "Trader"
 
-    # Moderate activity + moderate value = farmer/staker
+    # Moderate-high activity + moderate value = DeFi farmer
     if tx_count > 30 and total_value > 1_000:
         return "Farmer"
 
-    # Low activity + some value = holder
-    if tx_count < 10 and total_value > 100:
-        return "Long-term Holder"
-
-    # High activity + low value = possible airdrop hunter
+    # High activity + low value = airdrop hunting (lower confidence than score>=50)
     if tx_count > 50 and total_value < 500:
         return "Airdrop Hunter"
 
-    return "Trader"
+    # Low activity + some value = passive holder
+    if tx_count < 15 and total_value > 200:
+        return "Long-term Holder"
+
+    # Default: moderate engagement without a dominant signal
+    # Use value as tiebreaker — higher value = more likely a real investor
+    if total_value > 2_000:
+        return "Farmer"
+    return "Newcomer"
 
 
 def determine_persona_detail(
@@ -305,7 +372,7 @@ def determine_persona_detail(
             evidence.append(f"Small portfolio: ${total_value:,.0f}")
         secondary = "Long-term Holder" if stable_ratio > 0.5 else "Trader"
     elif primary == "Staker":
-        confidence = 0.8 if staked_share > 0.5 else 0.65
+        confidence = 0.85 if staked_share >= 0.5 else 0.75 if staked_share >= 0.2 else 0.60
         evidence.append(f"{staked_share:.0%} of portfolio staked")
         if has_governance_tokens:
             evidence.append("Holds governance tokens")
@@ -377,12 +444,16 @@ def score_wallet(
 
     balance = compute_balance_score(est_net_worth_usd, stable_usd_total)
     activity = compute_activity_score(tx_count, is_contract)
-    defi = compute_defi_investor_score(tx_count, stable_usd_total, top_token_count, est_net_worth_usd)
+    defi = compute_defi_investor_score(
+        tx_count, stable_usd_total, top_token_count, est_net_worth_usd,
+        staked_share=float(token_intel.get("staked_share", 0) or 0) if token_intel else 0.0,
+        has_governance_tokens=bool(token_intel.get("has_governance_tokens", False)) if token_intel else False,
+    )
     reputation = compute_reputation_score(known_entity_type, labels, label_types)
     sybil = compute_sybil_risk_score(tx_count, est_net_worth_usd, is_contract, known_entity_type)
 
     investor = compute_investor_score(balance, activity, defi, reputation, sybil, weights=weights)
-    tier = determine_tier(investor, known_entity_type, is_contract, label_types, thresholds=thresholds, wallet_type=wallet_type)
+    tier = determine_tier(investor, known_entity_type, is_contract, label_types, thresholds=thresholds, wallet_type=wallet_type, est_net_worth_usd=est_net_worth_usd)
 
     # Extract token intelligence data for persona detection
     staked_share = 0.0

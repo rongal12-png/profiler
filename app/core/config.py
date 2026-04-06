@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     FANTOM_RPC_URL: str | None = os.getenv("FANTOM_RPC_URL")
     BSC_RPC_URL: str | None = os.getenv("BSC_RPC_URL")
     SOLANA_RPC_URL: str | None = os.getenv("SOLANA_RPC_URL")
+    HEDERA_RPC_URL: str | None = os.getenv("HEDERA_RPC_URL", "https://mainnet.hashio.io/api")
+    TON_RPC_URL: str | None = os.getenv("TON_RPC_URL", "https://toncenter.com/api/v2")
 
     # External APIs
     COINGECKO_API_KEY: str | None = os.getenv("COINGECKO_API_KEY")

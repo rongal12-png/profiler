@@ -30,12 +30,13 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
 
     # --- Initial Setup & Pass A (Parallel RPC calls) ---
     chain_config = chains.get_chain_config(chain)
-    is_evm = chain != "solana"
+    is_evm = chain not in ("solana", "ton")
 
     native_balance = 0.0
     is_contract = False
     tx_count = 0
     stable_balances = []
+    _ton_nonstable_jettons: list = []  # populated only for TON, consumed in Pass B
 
     if is_evm:
         w3 = rpc.get_w3_instance(chain)
@@ -67,6 +68,30 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
                     if bal > 0:
                         stable_balances.append({"symbol": symbol, "address": token_addr, "amount": bal})
 
+    elif chain == "ton":
+        w3_or_client = None  # TON uses HTTP REST, no persistent client object
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_balance  = executor.submit(rpc.get_ton_native_balance, address)
+            future_contract = executor.submit(rpc.is_ton_contract, address)
+            future_tx_count = executor.submit(rpc.get_ton_tx_count, address)
+            # Fetch ALL known jettons in one tonapi.io call
+            all_ton_tokens = (chain_config.get("stables", {}) | chain_config.get("staked_tokens", {})
+                              | chain_config.get("governance_tokens", {}) | chain_config.get("top_tokens", {}))
+            future_jettons  = executor.submit(rpc.get_ton_jetton_balances, address, all_ton_tokens)
+
+            native_balance  = future_balance.result()
+            is_contract     = future_contract.result()
+            tx_count        = future_tx_count.result()
+            _ton_all_jettons = future_jettons.result()
+
+        # Split stable vs non-stable for Pass B
+        _stable_syms = set(chain_config.get("stables", {}).keys())
+        for tok in _ton_all_jettons:
+            if tok["symbol"] in _stable_syms:
+                stable_balances.append({**tok, "usd": tok["amount"]})
+        # Non-stable jettons are used in Pass B below
+        _ton_nonstable_jettons = [t for t in _ton_all_jettons if t["symbol"] not in _stable_syms]
+
     else:  # Solana
         client = rpc.get_solana_client(chain)
         w3_or_client = client
@@ -82,8 +107,8 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
                 stable_futures[f] = (symbol, token_addr)
 
             native_balance = future_balance.result()
-            is_contract = future_contract.result()
-            tx_count = future_tx_count.result()
+            is_contract    = future_contract.result()
+            tx_count       = future_tx_count.result()
 
             for f, (symbol, token_addr) in stable_futures.items():
                 bal = f.result()
@@ -111,10 +136,36 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
 
     if est_net_worth_usd >= 100 or tx_count >= 10:
         # Build lookup sets from known token configs for classification
-        staked_addrs = {v.lower(): k for k, v in chain_config.get("staked_tokens", {}).items()}
-        gov_addrs = {v.lower(): k for k, v in chain_config.get("governance_tokens", {}).items()}
-        stable_addrs = {v.lower() for v in chain_config.get("stables", {}).values()}
-        top_addrs = {v.lower(): k for k, v in chain_config.get("top_tokens", {}).items()}
+        # TON addresses are case-sensitive; EVM/Solana use lowercase for lookups
+        _addr_norm = (lambda a: a) if chain == "ton" else (lambda a: a.lower())
+        staked_addrs = {_addr_norm(v): k for k, v in chain_config.get("staked_tokens", {}).items()}
+        gov_addrs = {_addr_norm(v): k for k, v in chain_config.get("governance_tokens", {}).items()}
+        stable_addrs = {_addr_norm(v) for v in chain_config.get("stables", {}).values()}
+        top_addrs = {_addr_norm(v): k for k, v in chain_config.get("top_tokens", {}).items()}
+
+        # TON: categorize jettons fetched during Pass A
+        if chain == "ton":
+            for tok in _ton_nonstable_jettons:
+                tok_addr = tok["address"]  # case-sensitive for TON
+                entry = {"symbol": tok["symbol"], "address": tok_addr, "amount": tok["amount"], "usd": 0}
+                if tok_addr in staked_addrs:
+                    usd_val = float(tok["amount"]) * native_price_usd
+                    entry["usd"] = usd_val
+                    staked_token_balances.append(entry)
+                    est_net_worth_usd += usd_val
+                elif tok_addr in gov_addrs:
+                    governance_token_balances.append(entry)
+                else:
+                    top_token_balances.append(entry)
+
+            # Price non-staked top tokens via DeFiLlama
+            if top_token_balances:
+                token_addrs = tuple(t["address"] for t in top_token_balances)
+                llama_prices = rpc.get_token_prices_by_address(chain, token_addrs)
+                for token in top_token_balances:
+                    price = llama_prices.get(token["address"], 0)
+                    token["usd"] = round(float(token["amount"]) * price, 2)
+                    est_net_worth_usd += token["usd"]
 
         # Try Alchemy Token Discovery API (EVM only, single call for all tokens)
         discovered = []
@@ -157,7 +208,29 @@ def run_wallet_analysis(address: str, chain: str, effective_settings: dict | Non
                 llama_prices = rpc.get_token_prices_by_address(chain, token_addrs)
                 for token in top_token_balances:
                     price = llama_prices.get(token["address"].lower(), 0)
-                    token["usd"] = round(float(token["amount"]) * price, 2)
+                    raw_usd = float(token["amount"]) * price
+
+                    # Micro-cap sanity cap: tokens with a very low unit price are almost
+                    # always meme/airdrop/rug tokens. Their "paper value" (price × huge supply)
+                    # vastly exceeds what's actually realizable — a $0.00009 token held in
+                    # the billions looks like millions on paper but has no real exit liquidity.
+                    # We cap the per-token USD contribution by price tier.
+                    if price < 0.001:
+                        token_usd = min(raw_usd, 50_000)     # sub-$0.001: cap $50K
+                    elif price < 0.01:
+                        token_usd = min(raw_usd, 500_000)    # sub-$0.01:  cap $500K
+                    elif price < 0.10:
+                        token_usd = min(raw_usd, 2_000_000)  # sub-$0.10:  cap $2M
+                    else:
+                        token_usd = raw_usd                  # $0.10+: no cap
+
+                    if token_usd < raw_usd:
+                        logger.warning(
+                            f"Token value capped for {address}: {token['symbol']} "
+                            f"price=${price:.8f}, raw=${raw_usd:,.0f} → capped=${token_usd:,.0f}"
+                        )
+
+                    token["usd"] = round(token_usd, 2)
                     est_net_worth_usd += token["usd"]
 
             all_discovered_tokens = discovered

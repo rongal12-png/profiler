@@ -195,18 +195,54 @@ def get_token_prices_by_address(chain: str, contract_addresses: tuple) -> dict:
     if not to_fetch:
         return result  # 100% cache hit
 
+    # Minimum confidence threshold: below this, the price comes from a low-liquidity DEX
+    # pool that is easily manipulated or stale — we treat it as unreliable (price = 0).
+    MIN_CONFIDENCE = 0.70
+    # Maximum price age: if DeFiLlama's last update is older than this, reject the price.
+    MAX_PRICE_AGE_SECONDS = 48 * 3600  # 48 hours
+
     url = f"https://coins.llama.fi/prices/current/{','.join(f'{llama_chain}:{a}' for a in to_fetch)}"
     try:
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
         coins = resp.json().get("coins", {})
+        skipped = 0
         for coin_id, info in coins.items():
             addr = coin_id.split(":")[-1].lower()
             price = float(info.get("price", 0))
+            confidence = float(info.get("confidence", 1.0))
+            price_ts = info.get("timestamp")  # Unix timestamp of last price update
+
+            # Reject low-confidence prices (illiquid pools, potential manipulation)
+            if confidence < MIN_CONFIDENCE:
+                logger.warning(
+                    f"DeFiLlama: skipping low-confidence price for {addr} on {chain} "
+                    f"(confidence={confidence:.2f}, price=${price:,.4f})"
+                )
+                result[addr] = 0.0
+                _llama_price_cache[f"{llama_chain}:{addr}"] = (0.0, now)
+                skipped += 1
+                continue
+
+            # Reject stale prices (token may be rugged, delisted, or illiquid)
+            if price_ts is not None and (now - price_ts) > MAX_PRICE_AGE_SECONDS:
+                age_hours = (now - price_ts) / 3600
+                logger.warning(
+                    f"DeFiLlama: skipping stale price for {addr} on {chain} "
+                    f"(age={age_hours:.0f}h, price=${price:,.4f})"
+                )
+                result[addr] = 0.0
+                _llama_price_cache[f"{llama_chain}:{addr}"] = (0.0, now)
+                skipped += 1
+                continue
+
             result[addr] = price
             _llama_price_cache[f"{llama_chain}:{addr}"] = (price, now)
-        logger.info(f"DeFiLlama: fetched {len(coins)}/{len(to_fetch)} new prices on {chain} "
-                    f"({len(contract_addresses) - len(to_fetch)} from cache)")
+
+        logger.info(
+            f"DeFiLlama: fetched {len(coins)}/{len(to_fetch)} prices on {chain} "
+            f"({len(contract_addresses) - len(to_fetch)} cached, {skipped} rejected)"
+        )
     except Exception as e:
         logger.warning(f"DeFiLlama price lookup failed for {chain}: {_sanitize_error(e)}")
 
@@ -305,8 +341,12 @@ def get_token_metadata(rpc_url: str, contract_address: str) -> dict | None:
 def discover_evm_tokens(rpc_url: str, address: str, max_tokens: int = 30) -> list[dict]:
     """
     Discovers all ERC-20 tokens held by an address using Alchemy API.
-    Returns list of {symbol, name, contract_address, amount, balance_raw, decimals}.
-    Fetches metadata in parallel for speed.
+    Returns list of {symbol, name, contract_address, amount, decimals},
+    sorted by decimal-adjusted token amount descending.
+
+    Pre-filters to top 60 by raw balance before fetching metadata (cheap RPC call),
+    then re-sorts by actual (decimal-adjusted) amount so that tokens with unusual
+    decimal counts don't displace genuinely large holdings.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -314,18 +354,23 @@ def discover_evm_tokens(rpc_url: str, address: str, max_tokens: int = 30) -> lis
     if not raw_balances:
         return []
 
-    # Sort by balance (descending) and limit to top N
+    # Pre-filter: take 2× max_tokens by raw balance to give decimal adjustment room to re-rank.
+    # This avoids fetching metadata for thousands of dust tokens while still catching cases
+    # where a high-value 6-decimal token ranks below a large-quantity 18-decimal token.
     raw_balances.sort(key=lambda x: x["balance_raw"], reverse=True)
-    raw_balances = raw_balances[:max_tokens]
+    raw_balances = raw_balances[:max_tokens * 2]
 
-    # Fetch metadata in parallel
-    results = []
+    # Fetch metadata in parallel (results are cached 24h, so repeated scans are free)
+    candidates = []
 
     def fetch_one(tb):
         meta = get_token_metadata(rpc_url, tb["contract_address"])
         if meta and meta["symbol"] != "???" and meta["decimals"] is not None:
             decimals = meta["decimals"]
-            amount = tb["balance_raw"] / (10 ** decimals) if decimals > 0 else tb["balance_raw"]
+            # Guard against tokens claiming 0 or absurd decimal counts
+            if decimals < 0 or decimals > 36:
+                return None
+            amount = tb["balance_raw"] / (10 ** decimals) if decimals > 0 else float(tb["balance_raw"])
             if amount > 0:
                 return {
                     "symbol": meta["symbol"],
@@ -341,9 +386,11 @@ def discover_evm_tokens(rpc_url: str, address: str, max_tokens: int = 30) -> lis
         for f in futures:
             result = f.result()
             if result:
-                results.append(result)
+                candidates.append(result)
 
-    return results
+    # Re-sort by decimal-adjusted amount and keep top max_tokens
+    candidates.sort(key=lambda x: x["amount"], reverse=True)
+    return candidates[:max_tokens]
 
 
 # --- EVM Batch & Multicall3 ---
@@ -548,3 +595,90 @@ def get_sol_tx_count(client: Client, address: str) -> int:
     except (ValueError, SolanaRpcException) as e:
         logger.error(f"Failed to get transaction count for {address}: {e}")
         return 0
+
+
+# ─── TON (The Open Network) ───────────────────────────────────────────────────
+# Uses tonapi.io REST API (free, no key for basic use) for account info and
+# jetton (token) balances. TonCenter v2 is used as a fallback/alternative.
+
+_TONAPI_BASE = "https://tonapi.io/v2"
+_TONAPI_TIMEOUT = 12  # seconds
+
+
+def _tonapi_get(path: str, params: dict | None = None) -> dict | None:
+    """GET from tonapi.io, returns parsed JSON or None on error."""
+    try:
+        resp = requests.get(f"{_TONAPI_BASE}{path}", params=params, timeout=_TONAPI_TIMEOUT)
+        if resp.status_code == 200:
+            return resp.json()
+        logger.debug(f"tonapi.io {path} → HTTP {resp.status_code}")
+    except Exception as e:
+        logger.error(f"tonapi.io request failed for {path}: {e}")
+    return None
+
+
+@retry_on_rpc_error()
+def get_ton_native_balance(address: str) -> float:
+    """Returns TON balance in TON units (nanotons / 1e9)."""
+    data = _tonapi_get(f"/accounts/{address}")
+    if data:
+        return int(data.get("balance", 0)) / 1e9
+    return 0.0
+
+
+@retry_on_rpc_error()
+def get_ton_tx_count(address: str) -> int:
+    """Returns approximate transaction count (capped at 1000)."""
+    data = _tonapi_get(f"/accounts/{address}/events", params={"limit": 1000, "subject_only": "true"})
+    if data:
+        return len(data.get("events", []))
+    return 0
+
+
+def is_ton_contract(address: str) -> bool:
+    """Returns True if the address is NOT a regular user wallet (wallet_v*)."""
+    data = _tonapi_get(f"/accounts/{address}")
+    if data:
+        interfaces = data.get("interfaces", [])
+        # Wallet v1–v5 variants are user wallets
+        if any(i.startswith("wallet_v") for i in interfaces):
+            return False
+        # If there are non-wallet interfaces present, it's a contract
+        if interfaces:
+            return True
+    return False
+
+
+@retry_on_rpc_error()
+def get_ton_jetton_balances(address: str, token_addresses: dict[str, str]) -> list[dict]:
+    """
+    Fetch jetton (token) balances for the given address.
+    token_addresses: {symbol: jetton_master_address} — only returns tokens in this list.
+    Returns list of {symbol, address, amount} for tokens with balance > 0.
+    """
+    result = []
+    data = _tonapi_get(f"/accounts/{address}/jettons", params={"supported_extensions": "custom_payload"})
+    if not data:
+        return result
+
+    # Build a case-insensitive lookup of known token addresses
+    lookup = {v.lower(): (k, v) for k, v in token_addresses.items()}
+
+    for bal in data.get("balances", []):
+        jetton = bal.get("jetton", {})
+        master_addr = jetton.get("address", "")
+        if master_addr.lower() not in lookup:
+            continue
+
+        symbol, canonical_addr = lookup[master_addr.lower()]
+        try:
+            decimals = int(jetton.get("decimals", 9))
+            amount_raw = int(bal.get("balance", "0"))
+            amount = amount_raw / (10 ** decimals)
+        except (ValueError, TypeError):
+            continue
+
+        if amount > 0:
+            result.append({"symbol": symbol, "address": canonical_addr, "amount": amount})
+
+    return result

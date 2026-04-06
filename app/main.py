@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .api import routes
 from .api.admin_routes import admin_router
+from .api.project_routes import router as project_router
 from .core.models import Base
 from .core.config import engine
 
@@ -27,6 +28,7 @@ app.add_middleware(
 
 app.include_router(routes.router)
 app.include_router(admin_router)
+app.include_router(project_router)
 
 @app.get("/", tags=["Health Check"])
 def read_root():

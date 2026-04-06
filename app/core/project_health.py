@@ -58,11 +58,15 @@ def compute_community_quality_score(df) -> dict:
         whale_score = min(whale_count * 30, 100)
 
     # Health signals component (0-100) — inverse of bad signals
-    sybil_count = len(df[df['sybil_risk_score'] >= 40]) if 'sybil_risk_score' in df.columns else 0
+    # Flagged (>=50) have full impact; suspects (30-49) have partial impact
+    sybil_flagged = len(df[df['sybil_risk_score'] >= 50]) if 'sybil_risk_score' in df.columns else 0
+    sybil_suspect = len(df[(df['sybil_risk_score'] >= 30) & (df['sybil_risk_score'] < 50)]) if 'sybil_risk_score' in df.columns else 0
+    sybil_count = sybil_flagged + sybil_suspect  # for narrative
     sanctions_count = len(df[df['sanctions_hit'] == True]) if 'sanctions_hit' in df.columns else 0
-    sybil_ratio = sybil_count / total
+    flagged_ratio = sybil_flagged / total
+    suspect_ratio = sybil_suspect / total
     sanctions_ratio = sanctions_count / total
-    health_score = max(100 - sybil_ratio * 200 - sanctions_ratio * 500, 0)
+    health_score = max(100 - flagged_ratio * 300 - suspect_ratio * 50 - sanctions_ratio * 500, 0)
 
     # Weighted composite
     score = (
@@ -88,7 +92,7 @@ def compute_community_quality_score(df) -> dict:
             "investor_quality": {"score": round(investor_quality_score, 1), "weight": 0.25, "detail": f"Avg score {investor_quality_score:.1f}"},
             "diversity": {"score": round(diversity_score, 1), "weight": 0.15, "detail": f"{len(persona_counts)} persona types"},
             "whale_presence": {"score": round(whale_score, 1), "weight": 0.15, "detail": f"{whale_count} whales"},
-            "health": {"score": round(health_score, 1), "weight": 0.15, "detail": f"{sybil_count} sybil, {sanctions_count} sanctions"},
+            "health": {"score": round(health_score, 1), "weight": 0.15, "detail": f"{sybil_flagged} flagged / {sybil_suspect} suspect sybil, {sanctions_count} sanctions"},
         },
         "narrative": narrative,
     }
@@ -154,9 +158,9 @@ def compute_health_flags(df) -> list[dict]:
                 "recommendation": "CEX wallets aggregate many users behind one address. Consider filtering them for accurate user metrics.",
             })
 
-    # 2. Sybil cohort: >20% of wallets flagged
+    # 2. Sybil cohort: >20% of wallets flagged or suspect
     if 'sybil_risk_score' in df.columns:
-        sybil_count = len(df[df['sybil_risk_score'] >= 40])
+        sybil_count = len(df[df['sybil_risk_score'] >= 30])  # flagged + suspect
         sybil_pct = sybil_count / total
         if sybil_pct > 0.2:
             flags.append({

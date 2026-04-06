@@ -16,6 +16,19 @@ class JobStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
+class Project(Base):
+    __tablename__ = 'projects'
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+    wallet_list = Column(Text, nullable=False)   # JSON [{address, chain}, ...]
+    wallet_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    jobs = relationship("AnalysisJob", back_populates="project", order_by="AnalysisJob.created_at.desc()")
+
+
 class AnalysisJob(Base):
     __tablename__ = 'analysis_jobs'
 
@@ -27,12 +40,14 @@ class AnalysisJob(Base):
     status = Column(SQLAlchemyEnum(JobStatus), default=JobStatus.PENDING)
     total_wallets = Column(Integer)
     project_name = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=True)
     result = Column(String, nullable=True)
     pending_wallets = Column(Text, nullable=True)   # JSON list of {address, chain} for resume
     paused_at = Column(DateTime(timezone=True), nullable=True)
     stopped_at = Column(DateTime(timezone=True), nullable=True)
 
     wallets = relationship("WalletAnalysis", back_populates="job")
+    project = relationship("Project", back_populates="jobs")
 
 class WalletAnalysis(Base):
     __tablename__ = 'wallet_analyses'

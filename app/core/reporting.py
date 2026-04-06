@@ -16,7 +16,39 @@ from . import project_health
 
 # Setup Jinja2 environment (M10: autoescape=True to prevent XSS from blockchain data)
 template_loader = FileSystemLoader(searchpath=Path(__file__).parent / "templates")
-jinja_env = Environment(loader=template_loader, autoescape=True)
+jinja_env = Environment(loader=template_loader, autoescape=True, trim_blocks=True, lstrip_blocks=True)
+
+# Custom filters
+def _jinja_fmt_usd(value) -> str:
+    """Format a number as $1,234.56 — always with commas and 2 decimal places."""
+    try:
+        f = float(value) if value is not None else 0.0
+        if not math.isfinite(f):
+            f = 0.0
+    except (TypeError, ValueError):
+        f = 0.0
+    return f"${f:,.2f}"
+
+def _jinja_fmt_int(value) -> str:
+    """Format an integer with comma thousand separators: 10392 → 10,392."""
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return str(value)
+
+def _jinja_fmt_num(value, decimals=2) -> str:
+    """Format a number with commas and N decimal places (no $ sign)."""
+    try:
+        f = float(value) if value is not None else 0.0
+        if not math.isfinite(f):
+            f = 0.0
+    except (TypeError, ValueError):
+        f = 0.0
+    return f"{f:,.{decimals}f}"
+
+jinja_env.filters['fmt_usd'] = _jinja_fmt_usd
+jinja_env.filters['fmt_num'] = _jinja_fmt_num
+jinja_env.filters['fmt_int'] = _jinja_fmt_int
 
 
 def generate_reference_id(job_id: int) -> str:
@@ -476,9 +508,13 @@ def _aggregate_cross_chain(df: pd.DataFrame) -> pd.DataFrame:
         , 1), 0.0), 100.0)
         base['investor_score'] = new_investor_score
 
-        # Re-determine tier if this is a USER wallet
+        # Re-determine tier if this is a USER wallet (capital-based floors + score)
         if base.get('wallet_type') == 'USER':
-            if new_investor_score >= 55:
+            if combined_usd >= 1_000_000:
+                base['tier'] = 'Whale'
+            elif combined_usd >= 100_000:
+                base['tier'] = 'Whale' if new_investor_score >= 55 else 'Tuna'
+            elif new_investor_score >= 55:
                 base['tier'] = 'Whale'
             elif new_investor_score >= 30:
                 base['tier'] = 'Tuna'
@@ -495,7 +531,27 @@ def _aggregate_cross_chain(df: pd.DataFrame) -> pd.DataFrame:
         aggregated.append(base)
 
     agg_df = pd.DataFrame(aggregated)
-    return pd.concat([single_df, agg_df], ignore_index=True)
+    result = pd.concat([single_df, agg_df], ignore_index=True)
+
+    # Apply capital-aware tier logic to ALL wallets (not just multi-chain).
+    # Single-chain wallets carry DB tiers which predate the capital-floor logic.
+    def _reapply_tier(row):
+        if row.get('wallet_type') != 'USER':
+            return row.get('tier', 'Infra')
+        usd = float(row.get('est_net_worth_usd', 0) or 0)
+        score = float(row.get('investor_score', 0) or 0)
+        if usd >= 1_000_000:
+            return 'Whale'
+        if usd >= 100_000:
+            return 'Whale' if score >= 55 else 'Tuna'
+        if score >= 55:
+            return 'Whale'
+        if score >= 30:
+            return 'Tuna'
+        return 'Fish'
+
+    result['tier'] = result.apply(_reapply_tier, axis=1)
+    return result
 
 
 def _safe_float(val, default: float = 0.0) -> float:
@@ -538,7 +594,28 @@ def _validate_rendered(md: str) -> str:
     return md
 
 
-def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown', total_wallets_actual: int | None = None, chains_scanned: int | None = None) -> str:
+import logging as _logging
+_report_logger = _logging.getLogger(__name__)
+
+
+def _validate_report_metrics(m: dict) -> None:
+    """Log warnings for internally inconsistent metrics. Never raises — report still generates."""
+    tier_sum = m['whale_count'] + m['tuna_count'] + m['fish_count']
+    if tier_sum > m['user_wallets'] + 5:
+        _report_logger.warning(f"REPORT_VALIDATION: tier sum {tier_sum} > user_wallets {m['user_wallets']}")
+    if m['top10_wallets_share'] < m['top5_wallets_share'] - 0.001:
+        _report_logger.warning(f"REPORT_VALIDATION: top10 share < top5 share (impossible)")
+    if m['top5_wallets_share'] > 0.9 and m['top10_wallets_share'] < 0.8:
+        _report_logger.warning("REPORT_VALIDATION: top5>90% but top10<80% — inconsistent")
+    if (m['sybil_flagged_count'] + m['sybil_suspect_count']) > 0 and m['user_wallets'] > 0:
+        suspect_ratio = (m['sybil_flagged_count'] + m['sybil_suspect_count']) / m['user_wallets']
+        if suspect_ratio > 0.5:
+            _report_logger.warning(f"REPORT_VALIDATION: {suspect_ratio:.0%} of users are sybil suspect/flagged")
+    if m['direct_cex_wallets'] == 0 and m['exchange_funded_wallets'] > 10:
+        _report_logger.info(f"REPORT_INFO: 0 direct CEX wallets but {m['exchange_funded_wallets']} exchange-funded wallets")
+
+
+def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str = "Project", output_format='markdown', total_wallets_actual: int | None = None, chains_scanned: int | None = None, wtype_dist: dict | None = None, tier_dist: dict | None = None) -> str:  # tier_dist/wtype_dist are DB-level counts (all wallets)
     """Generates the full executive intelligence report with narrative-first structure."""
 
     # Aggregate cross-chain scans: one row per unique address with combined financials
@@ -549,29 +626,41 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     is_multi_chain = chains_scanned is not None and chains_scanned > 1
     report_is_sample = total_wallets_actual is not None and total_wallets_actual > len(df)
     failed_count = int(df['notes'].fillna('').str.startswith('Analysis failed:').sum()) if 'notes' in df.columns else 0
-    tier_dist = df['tier'].value_counts()
     # Ensure est_net_worth_usd is numeric; replace any None/NaN with 0
     df['est_net_worth_usd'] = pd.to_numeric(df['est_net_worth_usd'], errors='coerce').fillna(0.0)
     total_usd = _safe_float(df['est_net_worth_usd'].sum())
     chain_dist = df['chain'].value_counts()
     persona_dist = df['persona'].value_counts()
 
-    # Wallet type counts
-    wt_counts = df['wallet_type'].value_counts()
-    user_count = int(wt_counts.get('USER', 0))
-    cex_count = int(wt_counts.get('CEX_EXCHANGE', 0))
-    dex_count = int(wt_counts.get('DEX_ROUTER', 0))
-    bridge_count = int(wt_counts.get('BRIDGE', 0))
-    protocol_count = int(wt_counts.get('PROTOCOL', 0))
-    contract_count = int(wt_counts.get('CONTRACT', 0))
-    infra_total = total_wallets - user_count
-    user_pct = f"{user_count / total_wallets * 100:.1f}" if total_wallets > 0 else "0.0"
+    # Wallet type counts — prefer DB-level counts (all wallets) over df counts (REPORT_LIMIT sample)
+    if wtype_dist:
+        user_count = int(wtype_dist.get('USER', 0))
+        cex_count = int(wtype_dist.get('CEX_EXCHANGE', 0))
+        dex_count = int(wtype_dist.get('DEX_ROUTER', 0))
+        bridge_count = int(wtype_dist.get('BRIDGE', 0))
+        protocol_count = int(wtype_dist.get('PROTOCOL', 0))
+        contract_count = int(wtype_dist.get('CONTRACT', 0))
+        analyzed_count = total_wallets
+    else:
+        wt_counts = df['wallet_type'].value_counts()
+        user_count = int(wt_counts.get('USER', 0))
+        cex_count = int(wt_counts.get('CEX_EXCHANGE', 0))
+        dex_count = int(wt_counts.get('DEX_ROUTER', 0))
+        bridge_count = int(wt_counts.get('BRIDGE', 0))
+        protocol_count = int(wt_counts.get('PROTOCOL', 0))
+        contract_count = int(wt_counts.get('CONTRACT', 0))
+        analyzed_count = len(df)
+    infra_total = analyzed_count - user_count
+    user_pct = f"{user_count / analyzed_count * 100:.1f}" if analyzed_count > 0 else "0.0"
 
-    # Tier counts (among users only)
+    # Tier counts — recomputed from df after _aggregate_cross_chain (capital-aware logic applied).
+    # Whale/Tuna are reliable from df (high-value wallets score high, so always within REPORT_LIMIT).
+    # Fish = remaining users ensures whale + tuna + fish == user_count (DB-accurate total).
     users_df = df[df['wallet_type'] == 'USER']
+    tier_dist = df['tier'].value_counts()  # pandas Series for charts
     whale_count = int((users_df['tier'] == 'Whale').sum())
     tuna_count = int((users_df['tier'] == 'Tuna').sum())
-    fish_count = int((users_df['tier'] == 'Fish').sum())
+    fish_count = max(user_count - whale_count - tuna_count, 0)
     whale_usd_val = _safe_float(users_df[users_df['tier'] == 'Whale']['est_net_worth_usd'].fillna(0).sum())
     whale_usd = _fmt_usd(whale_usd_val)
 
@@ -581,10 +670,29 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     score_averages = {col: _fmt_score(score_df[col].mean()) if col in score_df.columns and len(score_df) > 0 else "0.0" for col in score_cols}
     avg_investor_score = _fmt_score(score_df['investor_score'].mean()) if 'investor_score' in score_df.columns and len(score_df) > 0 else "0.0"
 
-    # Risk
-    concentration_whales = df[df['tier'] == 'Whale']
-    concentration_risk = concentration_whales['est_net_worth_usd'].sum() / total_usd if total_usd > 0 else 0
-    sybil_risk_wallets = df[df['sybil_risk_score'] >= 40]
+    # Concentration: single source of truth from raw USD values (all from same df)
+    top1_wallet_usd = _safe_float(df['est_net_worth_usd'].max())
+    top5_wallet_usd = _safe_float(df.nlargest(5, 'est_net_worth_usd')['est_net_worth_usd'].sum())
+    top10_wallet_usd = _safe_float(df.nlargest(10, 'est_net_worth_usd')['est_net_worth_usd'].sum())
+    top1_wallet_share = top1_wallet_usd / total_usd if total_usd > 0 else 0.0
+    top5_wallet_share = top5_wallet_usd / total_usd if total_usd > 0 else 0.0
+    top10_wallet_share = top10_wallet_usd / total_usd if total_usd > 0 else 0.0
+    concentration_risk = top10_wallet_share  # shared with risk_overview for consistency
+
+    # Sybil: two-tier model — flagged (high confidence) vs suspect (elevated)
+    sybil_flagged_wallets = df[df['sybil_risk_score'] >= 50]   # SYBIL_RISK flag
+    sybil_suspect_wallets = df[(df['sybil_risk_score'] >= 30) & (df['sybil_risk_score'] < 50)]  # LOW_VALUE_HIGH_ACTIVITY
+    sybil_risk_wallets = df[df['sybil_risk_score'] >= 30]  # combined for table
+
+    # Exchange-funded count: wallets funded BY a CEX (distinct from wallets that ARE CEX)
+    exchange_funded_count = 0
+    if 'activity_indicators' in users_df.columns:
+        exchange_funded_count = int(users_df['activity_indicators'].apply(
+            lambda x: bool(isinstance(x, dict) and x.get('funding_source'))
+        ).sum())
+
+    # Deployable capital = stablecoins only (no native tokens — those require a swap)
+    total_stable = _safe_float(df['stable_usd_total'].sum())
 
     # Wealth buckets (users only)
     wealth_buckets = _build_wealth_buckets(df)
@@ -639,10 +747,9 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
         avg_score=('investor_score', 'mean')
     ).reset_index()
 
-    # Stablecoin vs native breakdown
-    total_stable = df['stable_usd_total'].sum()
-    total_native = total_usd - total_stable
-    stable_vs_native = pd.Series({'Stablecoin': max(total_stable, 0), 'Native Token': max(total_native, 0)})
+    # Stablecoin vs native breakdown (total_stable already computed above)
+    total_native = max(total_usd - total_stable, 0.0)
+    stable_vs_native = pd.Series({'Stablecoin': max(total_stable, 0), 'Native Token': total_native})
 
     # Generate plots
     tier_colors = {'Whale': '#1e40af', 'Tuna': '#0891b2', 'Fish': '#65a30d', 'Infra': '#9ca3af'}
@@ -692,12 +799,47 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
     table_cols_infra = _cols('address', 'chain', 'labels_str', 'est_net_worth_usd', 'confidence')
     table_cols_sybil = _cols('address', 'chain', 'tx_count', 'est_net_worth_usd', 'sybil_risk_score', 'wallet_type')
 
+    # --- Unified metrics object: single source of truth for all report sections ---
+    # All template sections MUST derive numbers from here, not from ad-hoc local vars.
+    unified_metrics = {
+        # Wallet counts
+        "scanned_wallets": total_wallets,           # all wallets in the job (DB total)
+        "analyzed_wallets": len(df),                # wallets in the df subset (post-aggregation)
+        "report_is_sample": report_is_sample,
+        "user_wallets": user_count,                 # USER-type wallets (DB-accurate)
+        "infra_wallets": infra_total,
+        "direct_cex_wallets": cex_count,            # wallets that ARE exchange infrastructure
+        "exchange_funded_wallets": exchange_funded_count,  # wallets funded BY an exchange
+        # Tier counts
+        "whale_count": whale_count,
+        "tuna_count": tuna_count,
+        "fish_count": fish_count,
+        # Financial
+        "total_usd": total_usd,
+        "deployable_stablecoin_usd": total_stable,  # stablecoins only
+        # Concentration (all from same df; consistent source of truth)
+        "top1_wallet_share": round(top1_wallet_share, 4),
+        "top5_wallets_share": round(top5_wallet_share, 4),
+        "top10_wallets_share": round(top10_wallet_share, 4),
+        "top1pct_share": concentration_metrics.get("top_1pct_share", 0),
+        "top5pct_share": concentration_metrics.get("top_5pct_share", 0),
+        "gini": concentration_metrics.get("gini", 0),
+        # Sybil — two-tier model
+        "sybil_flagged_count": len(sybil_flagged_wallets),   # score >= 50: confirmed
+        "sybil_suspect_count": len(sybil_suspect_wallets),   # score 30-49: suspect
+    }
+
+    # --- Pre-render validation ---
+    _validate_report_metrics(unified_metrics)
+
     context = {
         "project_name": project_name,
         "job_id": job_id,
         "reference_id": generate_reference_id(job_id),
         "generation_date": pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d %H:%M:%S UTC'),
         "total_wallets": total_wallets,
+        "analyzed_count": analyzed_count,
+        "persona_denominator": len(df),             # correct denominator for persona %
         "chains_scanned": chains_count,
         "scans_count": scans_count,
         "is_multi_chain": is_multi_chain,
@@ -727,10 +869,16 @@ def generate_executive_report(df: pd.DataFrame, job_id: int, project_name: str =
         "labeled_summary": labeled_summary,
         "wallet_type_breakdown": wallet_type_breakdown,
         "risk_overview": {
-            "concentration_pct": f"{concentration_risk:.2%}",
+            "concentration_pct": f"{concentration_risk:.2%}",    # top 10 wallets share
+            "top1_wallet_pct": f"{top1_wallet_share:.2%}",        # single largest wallet
+            "top5_wallets_pct": f"{top5_wallet_share:.2%}",       # top 5 wallets
             "num_whales": whale_count,
-            "sybil_risk_count": len(sybil_risk_wallets),
+            "sybil_flagged_count": len(sybil_flagged_wallets),    # score >= 50
+            "sybil_suspect_count": len(sybil_suspect_wallets),    # score 30-49
+            "sybil_risk_count": len(sybil_risk_wallets),          # combined (legacy compat)
         },
+        # Unified metrics (single source of truth for all sections)
+        "metrics": unified_metrics,
         "tables": {
             "top_by_score": top_by_score_df[[c for c in table_cols_score if c in top_by_score_df.columns]].to_dict('records') if len(top_by_score_df) > 0 else [],
             "top_whales": top_whales[[c for c in table_cols_whales if c in top_whales.columns]].to_dict('records') if len(top_whales) > 0 else [],

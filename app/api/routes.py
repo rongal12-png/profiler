@@ -21,8 +21,10 @@ router = APIRouter()
 _EVM_ADDRESS_RE = re.compile(r'^0x[0-9a-fA-F]{40}$')
 # Solana address pattern (base58, 32-44 chars)
 _SOLANA_ADDRESS_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
+# TON address: user-friendly (EQ/UQ/kQ/0Q + 46 base64url chars) or raw (0: + 64 hex)
+_TON_ADDRESS_RE = re.compile(r'^(?:[EUkO0Q][Qq][A-Za-z0-9_\-]{46}|0:[0-9a-fA-F]{64})$')
 
-SUPPORTED_CHAINS = {"ethereum", "base", "arbitrum", "polygon", "optimism", "bsc", "avalanche", "fantom", "solana"}
+SUPPORTED_CHAINS = {"ethereum", "base", "arbitrum", "polygon", "optimism", "bsc", "avalanche", "fantom", "solana", "hedera", "ton"}
 
 # "evm" expands to these 5 chains automatically
 EVM_MULTI_CHAINS = ["ethereum", "base", "arbitrum", "bsc", "polygon"]
@@ -53,6 +55,9 @@ def _validate_wallet_address(address: str, chain: str) -> str | None:
     if chain == "solana":
         if not _SOLANA_ADDRESS_RE.match(address):
             return f"Invalid Solana address: {address}"
+    elif chain == "ton":
+        if not _TON_ADDRESS_RE.match(address):
+            return f"Invalid TON address: {address} (expected EQ.../UQ... format or 0:hex)"
     else:
         if not _EVM_ADDRESS_RE.match(address):
             return f"Invalid EVM address: {address}"
@@ -437,13 +442,13 @@ def get_job_report(
             _log.exception(f"JSON report generation failed for job {job_id}")
             raise HTTPException(status_code=500, detail=f"Report generation error: {type(e).__name__}: {e}")
     elif format == 'markdown':
-        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name, total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
+        md_content = reporting.generate_executive_report(df, job_id, project_name=project_name, total_wallets_actual=unique_addresses, chains_scanned=chains_scanned, wtype_dist=wtype_dist, tier_dist=tier_dist)
         return Response(content=md_content, media_type='text/markdown')
     elif format == 'html':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned, wtype_dist=wtype_dist, tier_dist=tier_dist)
         return Response(content=html_content, media_type='text/html')
     elif format == 'pdf':
-        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned)
+        html_content = reporting.generate_executive_report(df, job_id, project_name=project_name, output_format='html', total_wallets_actual=unique_addresses, chains_scanned=chains_scanned, wtype_dist=wtype_dist, tier_dist=tier_dist)
         pdf_bytes = reporting.generate_pdf(html_content)
         safe_name = project_name.replace('"', '').replace(' ', '_')
         return Response(
